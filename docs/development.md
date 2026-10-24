@@ -70,3 +70,13 @@ npm test  # 上記に加えてAuth/Firestoreエミュレータで統合検証
 ```
 
 テストはローカル設定に関係なくモックまたは `demo-bukatsu` のエミュレータだけを使う。料金見積もりの前提・限界は `docs/free-tier.md` を参照する。
+
+## Firebase環境準備（PR #18）との互換性
+
+- `VITE_USE_EMULATOR=true` と従来の `VITE_USE_FIREBASE_EMULATORS=true` の両方に対応する。どちらかがtrueなら必ずエミュレータを使い、プロジェクトIDは `demo-bukatsu` 固定。実プロジェクトのWeb設定値をローカルエミュレータへ渡さない。
+- `src/data/firebase/app.ts` の `app` / `auth` / `db` はRepositoryと同じ初期化済みクライアントを共有する。
+- `npm run emulators` は `.emulator-data/` を読み込み、終了時に保存する。Authは9099、Firestoreは8080、管理UIは4000。Javaは21以上。管理UIと実機接続用にエミュレータは0.0.0.0で待ち受ける。
+- スマホからはPCのIPアドレスで開く。エミュレータの接続先も開いたホスト名になり、必要なら `.env.example` のホスト指定で上書きできる。
+- `.firebaserc` の既定はデモ用、`prod` 別名は実プロジェクトを指す。今回の作業・CIはデモ用のみを使い、実プロジェクトは操作しない。
+
+既存の `.env.local` でエミュレータのホストを127.0.0.1へ固定している場合、スマホ確認時はホスト指定を空欄にすると開いたホスト名を使います。`.env.local` を変更したら開発サーバーを再起動してください。

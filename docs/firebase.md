@@ -33,13 +33,13 @@ npm run emulators
 
 ```dotenv
 VITE_DATA_BACKEND=firebase
-VITE_USE_FIREBASE_EMULATORS=true
+VITE_USE_EMULATOR=true
 VITE_FIREBASE_PROJECT_ID=demo-bukatsu
 ```
 
 モックのサンプルユーザーはFirebase側には存在しません。画面で架空のメールアドレスを使って新規登録し、チームを作成します。
 複数アカウントを試す場合は別ブラウザ／別プロファイルを使用します。同じブラウザ内はAuthのログイン状態が同期されます。
-エミュレータは初回にランタイムをダウンロードします。通常の停止ではデータを保存しません。
+エミュレータは初回にランタイムをダウンロードします。`npm run emulators` は通常の停止時に `.emulator-data/` へデータを保存します。`npm test` は保存せず、毎回初期化して検証します。
 
 ## 作成済みプロジェクトの接続準備
 
@@ -47,7 +47,7 @@ VITE_FIREBASE_PROJECT_ID=demo-bukatsu
 2. Webアプリを登録し、「プロジェクトの設定 → マイアプリ → SDKの設定」から設定値を確認します。
 3. Authenticationで「メール／パスワード」を有効にします。実機で使用するドメインを承認済みドメインへ追加します。
 4. Cloud Firestore Standard editionのデフォルトデータベースを用意します。公開のテストモードは使わず、このPRのルールで制限します。
-5. `.env.example` を参考に `.env.local` に値を設定します。`VITE_DATA_BACKEND=firebase`、実環境では `VITE_USE_FIREBASE_EMULATORS=false` とします。
+5. `.env.example` を参考に `.env.local` に値を設定します。`VITE_DATA_BACKEND=firebase`、実環境では `VITE_USE_EMULATOR=false`（互換用の `VITE_USE_FIREBASE_EMULATORS` もfalseまたは未設定） とします。
 
 コレクションは、チーム作成・参加・予定作成などの書き込み時に作成されます。コンソールで空のコレクションを事前作成する必要はありません。
 `firestore.indexes.json` は追加の複合インデックスなしです。現在の予定一覧は `startAt` の単一フィールドインデックスで動作します。
@@ -87,3 +87,5 @@ npm test
 CIはログイン・秘密情報なしで同じ検証を行います。本番プロジェクトの権限設定やiPhone Safari／LINE内ブラウザの実機動作は別途確認が必要です。
 
 表示名変更は、取得済みの所持用具一覧とメンバーの所持数が一致することをトランザクションで確認し、用具の取得・手放しと競合した場合は一覧を読み直します。プロフィール・メンバー・所持用具の表示名が部分的に更新されることを防ぎます。
+
+PR #18の `VITE_USE_EMULATOR` とPR #19の `VITE_USE_FIREBASE_EMULATORS` は互換です。どちらかがtrueなら必ずAuth/Firestoreの両方をエミュレータへ接続し、`demo-bukatsu` 固定のダミー設定を使います。管理画面はhttp://127.0.0.1:4000です。

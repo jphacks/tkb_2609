@@ -33,3 +33,4 @@ work/
 .firebase/
 *-debug.log
 firestore-debug.log
+.emulator-data/

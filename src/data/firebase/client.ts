@@ -1,40 +1,36 @@
-import { initializeApp } from 'firebase/app'
-import { connectAuthEmulator, getAuth } from 'firebase/auth'
+import { firebaseOptions, usesEmulators } from './config'
+import { getApp, getApps, initializeApp } from 'firebase/app'
+import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth'
 import {
   connectFirestoreEmulator,
   initializeFirestore,
   memoryLocalCache,
   persistentLocalCache,
   persistentMultipleTabManager,
+  type Firestore,
 } from 'firebase/firestore'
 
+export const isUsingEmulators = () => usesEmulators(import.meta.env)
+let cached: { auth: Auth; db: Firestore } | undefined
+
 export function createFirebaseClient() {
+  if (cached) return cached
   const env = import.meta.env
-  const emulate = env.VITE_USE_FIREBASE_EMULATORS === 'true'
-  const projectId = env.VITE_FIREBASE_PROJECT_ID || (emulate ? 'demo-bukatsu' : '')
-  if (
-    !projectId ||
-    (!emulate && (!env.VITE_FIREBASE_API_KEY || !env.VITE_FIREBASE_APP_ID || !env.VITE_FIREBASE_AUTH_DOMAIN))
-  ) {
-    throw new Error('Firebase設定が不足しています。.env.local の設定を確認してください。')
-  }
-  const app = initializeApp({
-    projectId,
-    apiKey: env.VITE_FIREBASE_API_KEY || 'demo-api-key',
-    appId: env.VITE_FIREBASE_APP_ID || 'demo-app-id',
-    authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || `${projectId}.firebaseapp.com`,
-  })
+  const { emulate, options } = firebaseOptions(env)
+  const app = getApps().length ? getApp() : initializeApp(options)
   const auth = getAuth(app)
   const db = initializeFirestore(app, {
     localCache: emulate ? memoryLocalCache() : persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
   })
   if (emulate) {
-    connectAuthEmulator(auth, env.VITE_FIREBASE_AUTH_EMULATOR_URL || 'http://127.0.0.1:9099', { disableWarnings: true })
+    const host = typeof location === 'undefined' || location.hostname === 'localhost' ? '127.0.0.1' : location.hostname
+    connectAuthEmulator(auth, env.VITE_FIREBASE_AUTH_EMULATOR_URL || `http://${host}:9099`, { disableWarnings: true })
     connectFirestoreEmulator(
       db,
-      env.VITE_FIRESTORE_EMULATOR_HOST || '127.0.0.1',
+      env.VITE_FIRESTORE_EMULATOR_HOST || host,
       Number(env.VITE_FIRESTORE_EMULATOR_PORT || 8080),
     )
   }
-  return { auth, db }
+  cached = { auth, db }
+  return cached
 }
