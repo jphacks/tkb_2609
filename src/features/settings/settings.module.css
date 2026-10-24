@@ -54,18 +54,24 @@
   padding: 14px;
 }
 
+/* コード欄の文字サイズを、この行の幅（cqi）から決めるためのコンテナ */
 .codeRow {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
   padding: 8px 0;
+  container-type: inline-size;
 }
 
+/* 参加コード（8文字）。幅の広い文字（W・M）だけのコードでも欠けないよう、
+   コピーボタン（44px）と間隔を除いた幅に合わせて文字を縮める。余裕があれば 30px のまま */
 .code {
-  width: min(100%, 230px);
+  flex: 1;
+  width: 100%;
   min-width: 0;
   min-height: 44px;
+  padding: 0;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -73,9 +79,9 @@
   text-align: center;
   user-select: text;
   -webkit-user-select: text;
-  font-size: 30px;
+  font-size: min(30px, calc((100cqi - 56px) / 9.4));
   font-weight: 800;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.1em;
   font-variant-numeric: tabular-nums;
 }
 
