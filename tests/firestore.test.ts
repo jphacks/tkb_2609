@@ -657,7 +657,8 @@ describe('equipment/settings realtime integration (#9–#11)', () => {
     const errors: string[] = [],
       stopErrors = b.onError!((e) => errors.push(e.message))
     expect(await waitFor<string | null>((cb) => b.teams.subscribeJoinCode(t, cb))).toBeNull()
-    expect(errors).toHaveLength(1)
+    // 管理者でなくなった直後にも起きる想定内の拒否のため、エラーとして通知しない（#43）
+    expect(errors).toHaveLength(0)
     stopErrors()
     await a.teams.setRole(t, ub!.uid, 'admin')
     const codeChanged = waitFor<string | null>(

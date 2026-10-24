@@ -85,6 +85,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+.lineShare {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lineShareTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-sub);
+}
+
 .lineButton {
   background: #06c755;
   color: #fff;

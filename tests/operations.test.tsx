@@ -9,6 +9,7 @@ import { RefreshProvider } from '../src/app/RefreshProvider'
 import { FeedbackContext, type Feedback } from '../src/components/feedback/context'
 import { createMockRepository } from '../src/data/mock/mockRepository'
 import { LoginScreen } from '../src/features/auth/LoginScreen'
+import { SignUpScreen } from '../src/features/auth/SignUpScreen'
 import { EquipmentTab } from '../src/features/equipment/EquipmentTab'
 import { MyItemsWidget } from '../src/features/equipment/MyItemsWidget'
 import { SettingsTab } from '../src/features/settings/SettingsTab'
@@ -182,22 +183,32 @@ describe('equipment UI', () => {
   })
 })
 describe('settings UI', () => {
-  it('subscribes to the private code only after reveal and displays remote regeneration', async () => {
+  it('shows the private code from the start, shares the URL and the code as separate LINE messages (#42 #43)', async () => {
     const h = harness(),
       codes = stream<string | null>('ABCD2345')
     h.repo.teams.subscribeJoinCode = (_teamId, cb) => codes.subscribe(cb)
     h.repo.teams.regenerateJoinCode = vi.fn(async () => 'K7MPX2QA')
     const user = userEvent.setup(),
       view = render(<SettingsTab />, { wrapper: h.wrapper })
-    expect(codes.count()).toBe(0)
-    await user.click(screen.getByRole('button', { name: '参加コードを表示' }))
+    // 「参加コードを表示」ボタンはなく、設定タブを開いたら購読して表示する（#43）
+    expect(screen.queryByRole('button', { name: '参加コードを表示' })).toBeNull()
     expect(codes.count()).toBe(1)
-    codes.emit('K7MPX2QA')
     // 長押しで手動コピーできるよう、コードは読み取り専用の入力欄に表示する（PR #21）
+    expect((screen.getByLabelText('参加コード') as HTMLInputElement).value).toBe('ABCD2345')
+    codes.emit('K7MPX2QA')
     expect((screen.getByLabelText('参加コード') as HTMLInputElement).value).toBe('K7MPX2QA')
-    const link = screen.getByRole('link', { name: 'LINE で共有' }).getAttribute('href')!
-    expect(decodeURIComponent(link)).toContain('K7MPX2QA')
-    expect(decodeURIComponent(link)).toContain('openExternalBrowser=1')
+    // LINE では URL とコードを別のメッセージで送る。コードのメッセージはコードだけ（#42）
+    const shared = (name: string) =>
+      new URL(screen.getByRole('link', { name }).getAttribute('href')!).searchParams.get('text')!
+    const urlText = shared('① アプリの URL を送る')
+    expect(urlText).toContain('openExternalBrowser=1')
+    expect(urlText).not.toContain('K7MPX2QA')
+    expect(shared('② 参加コードを送る')).toBe('K7MPX2QA')
+    // 読み取れない・コードがない場合は、取得中のままにせず再発行できるようにする
+    codes.emit(null)
+    expect(screen.getByText(/参加コードを取得できませんでした/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'コードを再発行' })).toBeTruthy()
+    codes.emit('K7MPX2QA')
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => {}) } })
     await user.click(screen.getByRole('button', { name: '参加コードをコピー' }))
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('K7MPX2QA')
@@ -449,5 +460,57 @@ describe('Google sign-in button (#31)', () => {
     h.repo.auth.onAuthStateChanged((u) => users.push(u?.email))
     await h.repo.auth.signInWithGoogle()
     expect(users.at(-1)).toBe('google-user@example.com')
+  })
+})
+
+// #33：パスワードの表示・非表示の切り替え
+describe('password visibility toggle (#33)', () => {
+  it('switches the field type without submitting the form or moving the focus and cursor', async () => {
+    const h = harness()
+    const signIn = vi.spyOn(h.repo.auth, 'signIn')
+    const user = userEvent.setup()
+    render(<LoginScreen onSignUp={() => {}} />, { wrapper: h.wrapper })
+    const field = screen.getByLabelText('パスワード') as HTMLInputElement
+    expect(field.type).toBe('password')
+    expect(field.autocomplete).toBe('current-password')
+    await user.type(field, 'Abcd#123')
+    field.setSelectionRange(1, 3, 'backward')
+    // 名前は固定し、表示中かどうかは aria-pressed で伝える
+    const toggle = screen.getByRole('button', { name: 'パスワードを表示' })
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    await user.click(toggle)
+    expect(field.type).toBe('text')
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+    expect(field.value).toBe('Abcd#123')
+    expect(document.activeElement).toBe(field)
+    expect([field.selectionStart, field.selectionEnd, field.selectionDirection]).toEqual([1, 3, 'backward'])
+    expect(field.getAttribute('autocapitalize')).toBe('none')
+    expect(field.autocomplete).toBe('current-password')
+    expect(signIn).not.toHaveBeenCalled()
+    await user.click(toggle)
+    expect(field.type).toBe('password')
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+  })
+  it('hides the password again when the form is submitted', async () => {
+    const h = harness()
+    vi.spyOn(h.repo.auth, 'signIn').mockRejectedValue(new Error('failed'))
+    const user = userEvent.setup()
+    render(<LoginScreen onSignUp={() => {}} />, { wrapper: h.wrapper })
+    await user.type(screen.getByLabelText('メールアドレス'), 'admin@example.com')
+    const field = screen.getByLabelText('パスワード') as HTMLInputElement
+    await user.type(field, 'Abcd#123')
+    await user.click(screen.getByRole('button', { name: 'パスワードを表示' }))
+    expect(field.type).toBe('text')
+    // 表示のまま送るとパスワード管理機能が保存を提案しないことがあり、失敗時も見えたままになるため
+    await user.click(screen.getByRole('button', { name: 'ログイン' }))
+    expect(field.type).toBe('password')
+    expect(screen.getByRole('button', { name: 'パスワードを表示' }).getAttribute('aria-pressed')).toBe('false')
+  })
+  it('is available on the sign-up screen with the new-password autocomplete', () => {
+    const h = harness()
+    render(<SignUpScreen onLogin={() => {}} />, { wrapper: h.wrapper })
+    const field = screen.getByLabelText('パスワード') as HTMLInputElement
+    expect(field.autocomplete).toBe('new-password')
+    expect(screen.getByRole('button', { name: 'パスワードを表示' })).toBeTruthy()
   })
 })
