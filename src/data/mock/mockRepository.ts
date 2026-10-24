@@ -214,7 +214,8 @@ export function createMockRepository(): Repository & { reset(): void } {
       onAuthStateChanged(cb) {
         const listener = (uid: string | null) => {
           const account = uid ? db.accounts[uid] : undefined
-          cb(account ? { uid: account.uid, email: account.email } : null)
+          // モックではメールを送れないため、すべて確認済みとして扱う
+          cb(account ? { uid: account.uid, email: account.email, emailVerified: true } : null)
         }
         authListeners.add(listener)
         listener(currentUid)
@@ -246,6 +247,14 @@ export function createMockRepository(): Repository & { reset(): void } {
 
       async signOut() {
         setSession(null)
+      },
+
+      async sendEmailVerification() {
+        await sleep(LATENCY_MS)
+      },
+
+      async reloadUser() {
+        setSession(currentUid)
       },
 
       async sendPasswordReset() {

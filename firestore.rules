@@ -2,15 +2,18 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    // チームに関わる操作は、登録したメールアドレスを確認済みのユーザーだけに許可する（#39）。
+    // 自分のプロフィールの作成・読み取り・表示名の変更は、確認前でも signedIn() で許可する
+    function verified() { return signedIn() && request.auth.token.email_verified == true; }
     function me() { return request.auth.uid; }
     function memberPath(t, u) { return /databases/$(database)/documents/teams/$(t)/members/$(u); }
     function teamPath(t) { return /databases/$(database)/documents/teams/$(t); }
     function userPath(u) { return /databases/$(database)/documents/users/$(u); }
-    function cleanup(t) { return signedIn() && get(teamPath(t)).data.get('deletionUid', null) == me(); }
+    function cleanup(t) { return verified() && get(teamPath(t)).data.get('deletionUid', null) == me(); }
     // 削除中（deletionUid あり）でも、既存メンバーは最後に所属が外されるまで通常どおり使える。
     // 削除中に止めるのは新規参加と参加コードの発行のみ（members・joinCodes・private/joinCode の各ルール）
-    function member(t) { return signedIn() && exists(memberPath(t, me())); }
-    function readable(t) { return signedIn() && (exists(memberPath(t, me())) || cleanup(t)); }
+    function member(t) { return verified() && exists(memberPath(t, me())); }
+    function readable(t) { return verified() && (exists(memberPath(t, me())) || cleanup(t)); }
     function ids(d) { return d.get('teamIds', d.teamId == null ? [] : [d.teamId]); }
     function validIds(d) { return ids(d) is list && ids(d).size() <= 20
       && ids(d).size() == ids(d).toSet().size() && (d.teamId == null ? ids(d).size() == 0 : d.teamId in ids(d)); }
@@ -24,7 +27,7 @@ service cloud.firestore {
     function joining(t, u) {
       let before = ids(get(userPath(u)).data);
       let after = ids(getAfter(userPath(u)).data);
-      return signedIn() && u == me() && !(t in before) && after.toSet() == before.toSet().union([t].toSet())
+      return verified() && u == me() && !(t in before) && after.toSet() == before.toSet().union([t].toSet())
         && getAfter(userPath(u)).data.teamId == t;
     }
     function validProfile(d) { return d.keys().hasAll(['displayName', 'teamId'])
@@ -113,9 +116,9 @@ service cloud.firestore {
     }
     match /joinCodes/{code} {
       // A missing code may be read to check uniqueness; list is never allowed.
-      allow get: if signedIn();
+      allow get: if verified();
       allow list: if false;
-      allow create: if signedIn() && code.matches('^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$')
+      allow create: if verified() && code.matches('^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$')
         && request.resource.data.keys().hasAll(['teamId', 'createdAt'])
         && request.resource.data.keys().hasOnly(['teamId', 'createdAt'])
         && request.resource.data.createdAt == request.time
@@ -127,7 +130,7 @@ service cloud.firestore {
     }
     match /teams/{t} {
       allow get, list: if readable(t);
-      allow create: if signedIn() && request.resource.data.keys().hasAll(['name','createdBy','createdAt','settings','adminUid'])
+      allow create: if verified() && request.resource.data.keys().hasAll(['name','createdBy','createdAt','settings','adminUid'])
         && request.resource.data.keys().hasOnly(['name','createdBy','createdAt','settings','adminUid'])
         && text(request.resource.data.name, 60) && request.resource.data.createdBy == me()
         && request.resource.data.createdAt == request.time && request.resource.data.adminUid == me()
@@ -140,7 +143,7 @@ service cloud.firestore {
       match /private/joinCode {
         allow get: if admin(t) || cleanup(t);
         allow delete: if cleanup(t);
-        allow create, update: if signedIn() && !getAfter(teamPath(t)).data.keys().hasAny(['deletionUid']) && getAfter(memberPath(t, me())).data.role == 'admin'
+        allow create, update: if verified() && !getAfter(teamPath(t)).data.keys().hasAny(['deletionUid']) && getAfter(memberPath(t, me())).data.role == 'admin'
           && request.resource.data.keys().hasOnly(['code'])
           && getAfter(/databases/$(database)/documents/joinCodes/$(request.resource.data.code)).data.teamId == t
           && (!exists(/databases/$(database)/documents/teams/$(t)/private/joinCode)

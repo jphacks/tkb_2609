@@ -80,6 +80,8 @@ export interface EquipmentInput {
 export interface AuthUser {
   uid: string
   email: string
+  /** 登録したメールアドレスの持ち主であることを、確認メールのリンクで確認済みか（#39） */
+  emailVerified: boolean
 }
 
 export interface UserProfile {

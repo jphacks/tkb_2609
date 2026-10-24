@@ -134,21 +134,24 @@ function EditPolicySection() {
   )
 }
 
+/** 予定の種類を比べるためのキー。項目の並び順（id・名前・色）の違いは無視する。名前の空白は入力中の値を保つためそのまま比べる */
+const typesKey = (types: EventType[]) => JSON.stringify(types.map((t) => [t.id, t.label, t.color]))
+
 function EventTypesSection() {
   const repo = useRepository()
   const { team } = useSession()
   const { run } = useFeedback()
   const source = team.settings.eventTypes
-  const remoteKey = JSON.stringify(source)
+  const remoteKey = typesKey(source)
   const [draft, setDraft] = useState({ base: remoteKey, types: source })
-  const draftKey = JSON.stringify(draft.types)
+  const draftKey = typesKey(draft.types)
   const dirty = draftKey !== draft.base && draftKey !== remoteKey
   const types = dirty ? draft.types : source
   const conflict = dirty && draft.base !== remoteKey
   const setTypes = (change: (previous: EventType[]) => EventType[]) =>
     setDraft({ base: dirty ? draft.base : remoteKey, types: change(types) })
   const [busy, setBusy] = useState(false)
-  const changed = JSON.stringify(types) !== JSON.stringify(team.settings.eventTypes)
+  const changed = typesKey(types) !== remoteKey
   const validation = eventTypesError(types)
   const valid = validation === null
 
@@ -164,8 +167,15 @@ function EventTypesSection() {
   const save = async () => {
     if (busy || conflict || !valid) return
     setBusy(true)
+    const sentKey = typesKey(types)
     const eventTypes = types.map((t) => ({ ...t, label: t.label.trim() }))
-    await run(() => repo.teams.updateSettings(team.id, { eventTypes }), '予定の種類を保存しました')
+    const ok = await run(() => repo.teams.updateSettings(team.id, { eventTypes }), '予定の種類を保存しました')
+    // 保存した値を下書きの基準にする。保存時に名前の前後の空白を取り除くため、
+    // そのままだと自分の保存を「別の管理者の変更」と判定してしまう（#41）。保存中に続けて編集した分は残す
+    if (ok) {
+      const savedKey = typesKey(eventTypes)
+      setDraft((d) => ({ base: savedKey, types: typesKey(d.types) === sentKey ? eventTypes : d.types }))
+    }
     setBusy(false)
   }
 

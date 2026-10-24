@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { LoginScreen } from '../features/auth/LoginScreen'
 import { SignUpScreen } from '../features/auth/SignUpScreen'
 import { TeamEntryScreen } from '../features/auth/TeamEntryScreen'
+import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen'
 import type { AuthUser, Member, Team, UserProfile } from '../types'
 import { SessionContext, useRefresh, useRepository, type Session } from './contexts'
 import { MainShell } from './MainShell'
@@ -26,6 +27,8 @@ export function App() {
       <SignUpScreen onLogin={() => setAuthMode('login')} />
     )
   }
+  // メールアドレスを確認するまでは、チームの作成・参加などを始めない（#39）
+  if (!user.emailVerified) return <VerifyEmailScreen user={user} />
   return <SignedIn key={user.uid} user={user} />
 }
 

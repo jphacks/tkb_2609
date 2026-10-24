@@ -54,7 +54,9 @@ const eventData = () => ({
   createdBy: 'admin',
   updatedAt: serverTimestamp(),
 })
-const dbFor = (u: string) => env.authenticatedContext(u).firestore() as unknown as Firestore
+// ルールのテストで使う利用者は、メールアドレス確認済みとする（#39）。未確認の場合は unverifiedDbFor を使う
+const dbFor = (u: string) => env.authenticatedContext(u, { email_verified: true }).firestore() as unknown as Firestore
+const unverifiedDbFor = (u: string) => env.authenticatedContext(u).firestore() as unknown as Firestore
 const apps: FirebaseApp[] = []
 beforeAll(async () => {
   env = await initializeTestEnvironment({
@@ -96,6 +98,18 @@ beforeEach(async () => {
   })
 })
 describe('Firestore security rules', () => {
+  // #39：登録したメールアドレスを確認するまで、チームのデータには触れない。自分のプロフィールは確認前でも扱える
+  it('denies team data to users whose email is not verified, but allows their own profile', async () => {
+    const db = unverifiedDbFor('member')
+    await assertFails(getDoc(doc(db, 'teams/t')))
+    await assertFails(getDocs(collection(db, 'teams/t/events')))
+    await assertFails(getDoc(doc(db, 'joinCodes/K7MPX2QA')))
+    await assertFails(updateDoc(doc(db, 'teams/t/events/e'), { 'attendance.member': 'late', updatedAt: serverTimestamp() }))
+    await assertSucceeds(getDoc(doc(db, 'users/member')))
+    const fresh = unverifiedDbFor('fresh')
+    await assertSucceeds(setDoc(doc(fresh, 'users/fresh'), { displayName: '新規', teamId: null, teamIds: [] }))
+    await assertSucceeds(updateDoc(doc(fresh, 'users/fresh'), { displayName: '新しい名前' }))
+  })
   it('denies unauthenticated users and users outside the team', async () => {
     for (const db of [env.unauthenticatedContext().firestore() as unknown as Firestore, dbFor('outsider')]) {
       await assertFails(getDoc(doc(db, 'teams/t')))
@@ -269,7 +283,7 @@ function waitFor<T>(
     })
   })
 }
-async function client(): Promise<Repository> {
+async function client(verify = true): Promise<Repository> {
   const app = initializeApp({ projectId, apiKey: 'fake-api-key', appId: 'fake-app-id' }, randomUUID())
   apps.push(app)
   const auth = getAuth(app),
@@ -278,9 +292,34 @@ async function client(): Promise<Repository> {
   connectFirestoreEmulator(db, '127.0.0.1', 8080)
   const r = createFirestoreRepository(auth, db)
   await r.auth.signUp({ email: `${randomUUID()}@example.invalid`, password: 'Example123!', displayName: 'テスト' })
+  if (verify) {
+    await markEmailVerified(auth.currentUser!.uid)
+    await r.auth.reloadUser()
+  }
   return r
 }
+/** Auth エミュレータの管理 API で、メールアドレスを確認済みにする（確認メールのリンクを開いたことの代わり） */
+async function markEmailVerified(localId: string) {
+  const res = await fetch(`http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:update`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ localId, emailVerified: true }),
+  })
+  if (!res.ok) throw new Error(`failed to verify email: ${res.status}`)
+}
 describe('Firestore repository against Auth + Firestore emulators', () => {
+  it('sends a verification email on sign-up and blocks team creation until the email is verified (#39)', async () => {
+    const r = await client(false)
+    const me = (await waitFor<AuthUser | null>((cb) => r.auth.onAuthStateChanged(cb), (u) => !!u))!
+    expect(me.emailVerified).toBe(false)
+    const codes = await (await fetch(`http://127.0.0.1:9099/emulator/v1/projects/${projectId}/oobCodes`)).json()
+    expect(codes.oobCodes.some((c: { email: string; requestType: string }) => c.email === me.email && c.requestType === 'VERIFY_EMAIL')).toBe(true)
+    await expect(r.teams.create('未確認のチーム', '名前')).rejects.toThrow()
+    await markEmailVerified(me.uid)
+    await r.auth.reloadUser()
+    expect((await waitFor<AuthUser | null>((cb) => r.auth.onAuthStateChanged(cb), (u) => !!u?.emailVerified))?.emailVerified).toBe(true)
+    await expect(r.teams.create('確認後のチーム', '名前')).resolves.toBeTypeOf('string')
+  })
   it('creates and joins teams, scopes data, rotates codes and persists membership on sign-in', async () => {
     const a = await client(),
       b = await client(),
