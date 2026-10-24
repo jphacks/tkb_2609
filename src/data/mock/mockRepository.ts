@@ -7,7 +7,7 @@ import { equipmentNameError, isDuplicateEquipmentName } from '../../lib/equipmen
 import { generateJoinCode, normalizeJoinCode } from '../../lib/joinCode'
 import type { EquipmentItem, EventNote, Member, Team, TeamEvent, UserProfile } from '../../types'
 import { RepositoryError, type Repository, type Unsubscribe } from '../repository'
-import { createSeed } from './seed'
+import { createSeed, MOCK_GOOGLE_ACCOUNT } from './seed'
 
 export interface StoredEvent extends TeamEvent {
   notes: Record<string, EventNote>
@@ -241,6 +241,20 @@ export function createMockRepository(): Repository & { reset(): void } {
         const account = Object.values(db.accounts).find((a) => a.email === normalized)
         if (!account || account.password !== password) {
           throw new RepositoryError('メールアドレスまたはパスワードが正しくありません')
+        }
+        setSession(account.uid)
+      },
+
+      async signInWithGoogle() {
+        // モックでは Google の画面を出さず、Google アカウントでログインしたことにする（初回は登録も兼ねる）
+        await sleep(LATENCY_MS)
+        const email = MOCK_GOOGLE_ACCOUNT.email
+        let account = Object.values(db.accounts).find((a) => a.email === email)
+        if (!account) {
+          const uid = newId()
+          account = db.accounts[uid] = { uid, email, password: newId() }
+          db.users[uid] = { displayName: MOCK_GOOGLE_ACCOUNT.displayName, teamIds: [], teamId: null }
+          commit()
         }
         setSession(account.uid)
       },

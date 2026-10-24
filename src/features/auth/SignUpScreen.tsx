@@ -4,6 +4,7 @@ import { CheckIcon } from '../../components/icons'
 import { RepositoryError } from '../../data/repository'
 import { PASSWORD_RULES, isStrongPassword } from '../../lib/password'
 import styles from './auth.module.css'
+import { GoogleSignIn } from './GoogleSignIn'
 
 export function SignUpScreen({ onLogin }: { onLogin(): void }) {
   const repo = useRepository()
@@ -88,6 +89,8 @@ export function SignUpScreen({ onLogin }: { onLogin(): void }) {
           {busy ? '作成中…' : '作成する'}
         </button>
       </form>
+
+      <GoogleSignIn label="Google で登録" />
 
       <div className={styles.switch}>
         <span className="muted">アカウントをお持ちの方は</span>

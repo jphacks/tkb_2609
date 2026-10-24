@@ -2,16 +2,20 @@ import { eventTypesError } from '../../lib/eventTypes'
 import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   onAuthStateChanged,
   sendEmailVerification,
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   updateProfile,
   type Auth,
   type User,
+  type UserCredential,
 } from 'firebase/auth'
+import { FirebaseError } from 'firebase/app'
 import {
   collection,
   deleteDoc,
@@ -100,7 +104,22 @@ class ChangedPossession extends Error {}
 
 const authUserFrom = (user: User): AuthUser => ({ uid: user.uid, email: user.email || '', emailVerified: user.emailVerified })
 
-export function createFirestoreRepository(auth: Auth, db: Firestore): Repository {
+// Google のログイン画面（ポップアップ）。リダイレクト方式は iPhone の Safari でストレージの分離により失敗することがある（#31）
+const googleSignInWithPopup = (auth: Auth) => {
+  const provider = new GoogleAuthProvider()
+  // 複数の Google アカウントを使っている人が、毎回アカウントを選べるようにする
+  provider.setCustomParameters({ prompt: 'select_account' })
+  return signInWithPopup(auth, provider)
+}
+// ログイン画面を閉じた・もう一度押して前の画面が取り消された場合は、エラーとして扱わない
+const GOOGLE_CANCELLED = ['auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/user-cancelled']
+
+export function createFirestoreRepository(
+  auth: Auth,
+  db: Firestore,
+  // テストでは、ポップアップの代わりにエミュレータ用の資格情報でログインする
+  { googleSignIn = googleSignInWithPopup }: { googleSignIn?: (auth: Auth) => Promise<UserCredential> } = {},
+): Repository {
   // reload() では onAuthStateChanged が発火しないため、確認状態の更新はここから通知する
   const authListeners = new Set<(user: AuthUser | null) => void>()
   const deletionJobs = new Map<string, Promise<void>>()
@@ -307,6 +326,19 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
         await setPersistence(auth, browserLocalPersistence)
         const { user } = await signInWithEmailAndPassword(auth, email.trim(), password)
         await ensureProfile(user)
+      }),
+      signInWithGoogle: safe(async () => {
+        let credential: UserCredential
+        try {
+          // ポップアップがブロックされないよう、ボタンを押した直後に開く（setPersistence などの await を先に挟まない）。
+          // ログイン状態は getAuth の既定（IndexedDB）で保存される
+          credential = await googleSignIn(auth)
+        } catch (e) {
+          if (e instanceof FirebaseError && GOOGLE_CANCELLED.includes(e.code)) return
+          throw e
+        }
+        // 初回はプロフィールを作る。表示名の初期値は Google アカウントの名前（チームでの名前は参加・作成時に入力する）
+        await ensureProfile(credential.user)
       }),
       signOut: safe(() => signOut(auth)),
       sendPasswordReset: safe((email) => sendPasswordResetEmail(auth, email.trim())),
