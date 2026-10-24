@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { App } from '../src/app/App'
 import { RepositoryContext, SessionContext, type Session } from '../src/app/contexts'
 import { RefreshProvider } from '../src/app/RefreshProvider'
 import { FeedbackContext, type Feedback } from '../src/components/feedback/context'
@@ -325,5 +326,30 @@ describe('settings and equipment writes', () => {
     await user.click(screen.getByRole('button', { name: '管理者にする' }))
     expect(h.feedback.confirm).toHaveBeenCalled()
     expect(h.repo.teams.setRole).toHaveBeenCalledWith('team', 'member', 'admin')
+  })
+})
+
+describe('team deletion recovery (#24)', () => {
+  // 削除中の画面は開始した管理者だけ。ほかのメンバーは削除が完了するまで通常の画面を使える
+  it.each([true, false])('shows the deletion screen only to the initiator (initiator=%s)', async (initiator) => {
+    const h = harness(), session = h.session()
+    vi.spyOn(h.repo.auth, 'onAuthStateChanged').mockImplementation((cb) => { cb(session.user); return () => {} })
+    vi.spyOn(h.repo.users, 'subscribeProfile').mockImplementation((_uid, cb) => { cb(session.profile); return () => {} })
+    const deleting = {...session.team, deleting:true, deletionUid:initiator ? session.user.uid : 'another-admin'}
+    vi.spyOn(h.repo.teams, 'subscribeMine').mockImplementation((cb) => { cb([deleting]); return () => {} })
+    vi.spyOn(h.repo.teams, 'subscribe').mockImplementation((_id, cb) => { cb(deleting); return () => {} })
+    vi.spyOn(h.repo.teams, 'subscribeMembers').mockImplementation((_id, cb) => { cb(session.members); return () => {} })
+    const remove = vi.spyOn(h.repo.teams, 'remove').mockResolvedValue()
+    render(<App />, {wrapper:h.wrapper})
+    if (initiator) {
+      expect(await screen.findByRole('heading', {name:'チームを削除中です'})).toBeTruthy()
+      expect(screen.queryByRole('button', {name:'予定を追加'})).toBeNull()
+      await userEvent.click(screen.getByRole('button', {name:'削除を再開'}))
+      expect(remove).toHaveBeenCalledWith(session.team.id)
+    } else {
+      expect(await screen.findByRole('heading', {name:session.team.name})).toBeTruthy()
+      expect(screen.queryByRole('heading', {name:'チームを削除中です'})).toBeNull()
+      expect(screen.queryByRole('button', {name:'削除を再開'})).toBeNull()
+    }
   })
 })

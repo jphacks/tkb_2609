@@ -6,17 +6,31 @@ service cloud.firestore {
     function memberPath(t, u) { return /databases/$(database)/documents/teams/$(t)/members/$(u); }
     function teamPath(t) { return /databases/$(database)/documents/teams/$(t); }
     function userPath(u) { return /databases/$(database)/documents/users/$(u); }
+    function cleanup(t) { return signedIn() && get(teamPath(t)).data.get('deletionUid', null) == me(); }
+    // 削除中（deletionUid あり）でも、既存メンバーは最後に所属が外されるまで通常どおり使える。
+    // 削除中に止めるのは新規参加と参加コードの発行のみ（members・joinCodes・private/joinCode の各ルール）
     function member(t) { return signedIn() && exists(memberPath(t, me())); }
+    function readable(t) { return signedIn() && (exists(memberPath(t, me())) || cleanup(t)); }
+    function ids(d) { return d.get('teamIds', d.teamId == null ? [] : [d.teamId]); }
+    function validIds(d) { return ids(d) is list && ids(d).size() <= 20
+      && ids(d).size() == ids(d).toSet().size() && (d.teamId == null ? ids(d).size() == 0 : d.teamId in ids(d)); }
+    function removed(t, u) { return !(t in ids(getAfter(userPath(u)).data)); }
+    function managementTeam() { return get(userPath(me())).data.teamId; }
+
     function admin(t) { return member(t) && get(memberPath(t, me())).data.role == 'admin'; }
     function editor(t) { return member(t) && (admin(t) || get(teamPath(t)).data.settings.eventEditPolicy == 'all'); }
     function text(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
     function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
     function joining(t, u) {
-      return signedIn() && u == me() && get(userPath(u)).data.teamId == null
+      let before = ids(get(userPath(u)).data);
+      let after = ids(getAfter(userPath(u)).data);
+      return signedIn() && u == me() && !(t in before) && after.toSet() == before.toSet().union([t].toSet())
         && getAfter(userPath(u)).data.teamId == t;
     }
-    function validProfile(d) { return d.keys().hasAll(['displayName', 'teamId']) && d.keys().hasOnly(['displayName', 'teamId'])
-      && text(d.displayName, 40) && (d.teamId == null || text(d.teamId, 128)); }
+    function validProfile(d) { return d.keys().hasAll(['displayName', 'teamId'])
+      && d.keys().hasOnly(['displayName', 'teamId', 'teamIds', 'membershipChangeTeamId'])
+      && text(d.displayName, 40) && (d.teamId == null || text(d.teamId, 128)) && validIds(d)
+      && (!('membershipChangeTeamId' in d) || text(d.membershipChangeTeamId, 128)); }
     function validMember(d) {
       return d.keys().hasAll(['displayName', 'role', 'joinedAt', 'joinCode', 'heldCount', 'equipmentChangeId'])
         && d.keys().hasOnly(['displayName', 'role', 'joinedAt', 'joinCode', 'heldCount', 'equipmentChangeId'])
@@ -45,7 +59,7 @@ service cloud.firestore {
     function activeAdminAfter(t) { return getAfter(memberPath(t, getAfter(teamPath(t)).data.adminUid)).data.role == 'admin'; }
     function validEvent(d) {
       return d.keys().hasAll(['title', 'typeId', 'startAt', 'place', 'attendance', 'createdBy', 'updatedAt'])
-        && d.keys().hasOnly(['title', 'typeId', 'startAt', 'place', 'attendance', 'createdBy', 'updatedAt'])
+        && d.keys().hasOnly(['title', 'typeId', 'startAt', 'place', 'attendance', 'createdBy', 'updatedAt', 'deleting'])
         && text(d.title, 100) && text(d.typeId, 100) && d.startAt is timestamp
         && (d.place == null || (d.place is string && d.place.size() <= 200))
         && d.attendance is map && d.attendance.size() <= 100 && text(d.createdBy, 128)
@@ -71,15 +85,30 @@ service cloud.firestore {
       );
     }
     match /users/{u} {
-      allow get: if signedIn() && (u == me() || (resource.data.teamId != null && admin(resource.data.teamId)));
+      function removal() {
+        let t = request.resource.data.get('membershipChangeTeamId', resource.data.teamId);
+        return t is string && t in ids(resource.data)
+          && (u == me() || (t == managementTeam() && (admin(t) || cleanup(t))))
+          && ids(request.resource.data).toSet() == ids(resource.data).toSet().difference([t].toSet())
+          && !existsAfter(memberPath(t, u))
+          && (resource.data.teamId == t || request.resource.data.teamId == resource.data.teamId);
+      }
+      allow get: if signedIn() && (u == me() || (managementTeam() in ids(resource.data)
+        && (admin(managementTeam()) || cleanup(managementTeam()))));
       allow list: if false;
-      allow create: if signedIn() && u == me() && validProfile(request.resource.data) && request.resource.data.teamId == null;
+      allow create: if signedIn() && u == me() && validProfile(request.resource.data)
+        && request.resource.data.teamId == null && ids(request.resource.data).size() == 0;
       allow update: if signedIn() && validProfile(request.resource.data) && (
         (u == me() && changed().hasOnly(['displayName']))
-        || (u == me() && changed().hasOnly(['teamId']) && resource.data.teamId == null
-          && getAfter(memberPath(request.resource.data.teamId, u)).data.displayName == resource.data.displayName)
-        || ((u == me() || admin(resource.data.teamId)) && changed().hasOnly(['teamId'])
-          && request.resource.data.teamId == null && !existsAfter(memberPath(resource.data.teamId, u)))
+        || (u == me() && changed().hasOnly(['teamIds']) && !('teamIds' in resource.data)
+          && ids(request.resource.data) == ids(resource.data))
+        || (u == me() && changed().hasOnly(['teamId']) && request.resource.data.teamId in ids(resource.data)
+          && exists(memberPath(request.resource.data.teamId, u)))
+        || (changed().hasOnly(['teamId', 'teamIds', 'membershipChangeTeamId']) && (
+          (u == me() && joining(request.resource.data.teamId, u)
+            && existsAfter(memberPath(request.resource.data.teamId, u)))
+          || removal()
+        ))
       );
     }
     match /joinCodes/{code} {
@@ -90,24 +119,28 @@ service cloud.firestore {
         && request.resource.data.keys().hasAll(['teamId', 'createdAt'])
         && request.resource.data.keys().hasOnly(['teamId', 'createdAt'])
         && request.resource.data.createdAt == request.time
+        && getAfter(teamPath(request.resource.data.teamId)).data.get('deletionUid', null) == null
         && getAfter(memberPath(request.resource.data.teamId, me())).data.role == 'admin'
         && getAfter(/databases/$(database)/documents/teams/$(request.resource.data.teamId)/private/joinCode).data.code == code;
-      allow delete: if admin(resource.data.teamId)
-        && getAfter(/databases/$(database)/documents/teams/$(resource.data.teamId)/private/joinCode).data.code != code;
+      allow delete: if cleanup(resource.data.teamId) || (admin(resource.data.teamId)
+        && getAfter(/databases/$(database)/documents/teams/$(resource.data.teamId)/private/joinCode).data.code != code);
     }
     match /teams/{t} {
-      allow get, list: if member(t);
+      allow get, list: if readable(t);
       allow create: if signedIn() && request.resource.data.keys().hasAll(['name','createdBy','createdAt','settings','adminUid'])
         && request.resource.data.keys().hasOnly(['name','createdBy','createdAt','settings','adminUid'])
         && text(request.resource.data.name, 60) && request.resource.data.createdBy == me()
         && request.resource.data.createdAt == request.time && request.resource.data.adminUid == me()
         && validSettings(request.resource.data.settings) && joining(t, me()) && activeAdminAfter(t)
         && getAfter(/databases/$(database)/documents/joinCodes/$(getAfter(/databases/$(database)/documents/teams/$(t)/private/joinCode).data.code)).data.teamId == t;
-      allow update: if admin(t) && changed().hasOnly(['name', 'settings', 'adminUid'])
-        && text(request.resource.data.name, 60) && validSettings(request.resource.data.settings) && activeAdminAfter(t);
+      allow update: if (admin(t) && changed().hasOnly(['name', 'settings', 'adminUid'])
+        && text(request.resource.data.name, 60) && validSettings(request.resource.data.settings) && activeAdminAfter(t))
+        || (admin(t) && changed().hasOnly(['deletionUid']) && request.resource.data.deletionUid == me());
+      allow delete: if cleanup(t) && !existsAfter(memberPath(t, me())) && removed(t, me());
       match /private/joinCode {
-        allow get: if admin(t);
-        allow create, update: if signedIn() && getAfter(memberPath(t, me())).data.role == 'admin'
+        allow get: if admin(t) || cleanup(t);
+        allow delete: if cleanup(t);
+        allow create, update: if signedIn() && !getAfter(teamPath(t)).data.keys().hasAny(['deletionUid']) && getAfter(memberPath(t, me())).data.role == 'admin'
           && request.resource.data.keys().hasOnly(['code'])
           && getAfter(/databases/$(database)/documents/joinCodes/$(request.resource.data.code)).data.teamId == t
           && (!exists(/databases/$(database)/documents/teams/$(t)/private/joinCode)
@@ -115,9 +148,9 @@ service cloud.firestore {
             || !existsAfter(/databases/$(database)/documents/joinCodes/$(resource.data.code)));
       }
       match /members/{u} {
-        allow get, list: if member(t);
+        allow get, list: if readable(t);
         allow create: if joining(t, u) && validMember(request.resource.data)
-          && request.resource.data.displayName == get(userPath(u)).data.displayName
+          && getAfter(teamPath(t)).data.get('deletionUid', null) == null
           && request.resource.data.joinedAt == request.time && request.resource.data.heldCount == 0
           && request.resource.data.equipmentChangeId == '' && (
             (!exists(teamPath(t)) && getAfter(teamPath(t)).data.createdBy == u && request.resource.data.role == 'admin')
@@ -125,35 +158,37 @@ service cloud.firestore {
               && get(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode)).data.teamId == t)
           );
         allow update: if member(t) && validMember(request.resource.data) && (
-          (u == me() && changed().hasOnly(['displayName']) && request.resource.data.displayName == getAfter(userPath(u)).data.displayName)
+          (u == me() && changed().hasOnly(['displayName']))
           || (admin(t) && changed().hasOnly(['role']) && activeAdminAfter(t))
           || counterUpdate(t, u)
         );
-        allow delete: if member(t) && (u == me() || admin(t)) && resource.data.heldCount == 0
-          && getAfter(userPath(u)).data.teamId == null && activeAdminAfter(t);
+        allow delete: if (cleanup(t) && removed(t, u)) || (member(t) && (u == me() || admin(t)) && resource.data.heldCount == 0
+          && removed(t, u) && activeAdminAfter(t));
       }
       match /events/{e} {
-        allow get, list: if member(t);
-        allow create: if editor(t) && validEvent(request.resource.data)
+        allow get, list: if readable(t);
+        allow create: if editor(t) && validEvent(request.resource.data) && !request.resource.data.get('deleting', false)
           && request.resource.data.createdBy == me() && request.resource.data.attendance.size() == 0;
         allow update: if member(t) && validEvent(request.resource.data) && (
-          (editor(t) && changed().hasOnly(['title', 'typeId', 'startAt', 'place', 'updatedAt']))
-          || (changed().hasOnly(['attendance', 'updatedAt'])
+          (editor(t) && changed().hasOnly(['deleting', 'updatedAt']) && request.resource.data.deleting == true)
+          || (!resource.data.get('deleting', false) && editor(t) && changed().hasOnly(['title', 'typeId', 'startAt', 'place', 'updatedAt']))
+          || (!resource.data.get('deleting', false) && changed().hasOnly(['attendance', 'updatedAt'])
             && request.resource.data.attendance.diff(resource.data.attendance).affectedKeys().hasOnly([me()])
             && (!request.resource.data.attendance.keys().hasAny([me()])
               || request.resource.data.attendance[me()] in ['absent', 'observe', 'late', 'leave_early']))
         );
-        allow delete: if editor(t);
+        allow delete: if editor(t) || cleanup(t);
         match /notes/{n} {
-          allow get, list: if member(t) && (exists(/databases/$(database)/documents/teams/$(t)/events/$(e)) || editor(t));
+          allow get, list: if cleanup(t) || (member(t) && (exists(/databases/$(database)/documents/teams/$(t)/events/$(e)) || editor(t)));
           allow create: if member(t) && existsAfter(/databases/$(database)/documents/teams/$(t)/events/$(e))
+            && !getAfter(/databases/$(database)/documents/teams/$(t)/events/$(e)).data.get('deleting', false)
             && request.resource.data.keys().hasAll(['authorUid', 'authorName', 'body', 'createdAt'])
             && request.resource.data.keys().hasOnly(['authorUid', 'authorName', 'body', 'createdAt'])
             && request.resource.data.authorUid == me()
             && request.resource.data.authorName == get(memberPath(t, me())).data.displayName
             && text(request.resource.data.body, 2000) && request.resource.data.createdAt == request.time;
-          allow delete: if member(t) && (resource.data.authorUid == me()
-            || (editor(t) && !existsAfter(/databases/$(database)/documents/teams/$(t)/events/$(e))));
+          allow delete: if cleanup(t) || (member(t) && (resource.data.authorUid == me()
+            || (editor(t) && (!existsAfter(/databases/$(database)/documents/teams/$(t)/events/$(e)) || getAfter(/databases/$(database)/documents/teams/$(t)/events/$(e)).data.get('deleting', false)))));
         }
       }
       match /equipment/{i} {
@@ -163,7 +198,7 @@ service cloud.firestore {
           && !d.nameKey.matches('.*[/].*') && d.updatedAt == request.time
           && ((d.holderUid == null && d.holderName == null)
             || (d.holderUid is string && d.holderName == getAfter(memberPath(t, d.holderUid)).data.displayName)); }
-        allow get, list: if member(t);
+        allow get, list: if readable(t);
         allow create: if member(t) && validItem(request.resource.data) && request.resource.data.holderUid == null
           && !exists(namePath(t, request.resource.data.nameKey))
           && getAfter(namePath(t, request.resource.data.nameKey)).data.itemId == i;
@@ -179,15 +214,15 @@ service cloud.firestore {
             || (resource.data.holderUid == me() && request.resource.data.holderUid == me())
           ))
         );
-        allow delete: if member(t) && !existsAfter(namePath(t, resource.data.nameKey))
-          && (resource.data.holderUid == null || countChanged(t, resource.data.holderUid, -1, i));
+        allow delete: if cleanup(t) || (member(t) && !existsAfter(namePath(t, resource.data.nameKey))
+          && (resource.data.holderUid == null || countChanged(t, resource.data.holderUid, -1, i)));
       }
       match /equipmentNames/{key} {
-        allow get: if member(t);
+        allow get, list: if readable(t);
         allow create: if member(t) && request.resource.data.keys().hasOnly(['itemId'])
           && getAfter(equipmentPath(t, request.resource.data.itemId)).data.nameKey == key;
-        allow delete: if member(t) && (!existsAfter(equipmentPath(t, resource.data.itemId))
-          || getAfter(equipmentPath(t, resource.data.itemId)).data.nameKey != key);
+        allow delete: if cleanup(t) || (member(t) && (!existsAfter(equipmentPath(t, resource.data.itemId))
+          || getAfter(equipmentPath(t, resource.data.itemId)).data.nameKey != key));
       }
     }
   }

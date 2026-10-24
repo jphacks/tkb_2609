@@ -9,6 +9,7 @@ users/{uid}
   displayName: string
   teamIds: string[]                     … 所属チーム一覧
   teamId: string | null                  … 選択中のチーム
+  membershipChangeTeamId: string         … 最後に所属変更した対象（所属変更時に保存）
 
 joinCodes/{code}                       … 参加コード → チームの対応表
   teamId: string
@@ -19,6 +20,7 @@ teams/{teamId}
   createdBy: uid
   createdAt: Timestamp
   adminUid: uid                       … 管理者が最低1人残ることを検証する参照先
+  deletionUid?: uid                    … 削除開始者。存在すると新規参加・参加コード発行を停止（既存メンバーは通常どおり使える）
   settings:
     eventEditPolicy: "admins" | "all"
     eventTypes: [{ id: string, label: string, color: string }]
@@ -39,6 +41,7 @@ teams/{teamId}/events/{eventId}
   typeId: string                       … settings.eventTypes の id
   startAt: Timestamp                   … 日付と集合時間
   place: string | null
+  deleting?: boolean                  … 予定削除の清掃中は true（一覧に表示しない）
   attendance: { [uid]: "absent" | "observe" | "late" | "leave_early" }
                                        … キーがない人は「出席」
   createdBy: uid
@@ -68,9 +71,9 @@ teams/{teamId}/equipmentNames/{nameKey}
 - メモは詳細画面を開いたときだけ読む。一覧では読まない
 - 用具の `holderName` は表示用のコピー。表示名はチーム内の members が正とする。表示名を変えたときは対象チームで自分が持っている用具の `holderName` も更新する
 - 用具名の重複判定は、名前を正規化（NFKC・小文字化・空白除去）して比べる。Firestore 版では、正規化した名前を ID にした `teams/{teamId}/equipmentNames/{key}` を同じ書き込みで作り、ルールで「すでに存在するなら作れない」ようにして重複を防ぐ
-- **Firestore**：チームを離れる・登録削除するときは、用具をトランザクションで1点ずつ解放し、所持数が0のときのみ「`members/{uid}` の削除」「`users/{uid}.teamId` を `null` に」を同じトランザクションで行う。途中失敗では所属が残り、再実行できる（理由は `docs/decisions.md`）
+- **Firestore**：チームを離れる・登録削除するときは、用具をトランザクションで1点ずつ解放し、所持数が0のときのみ「`members/{uid}` の削除」「`users/{uid}.teamIds` から対象だけを削除し、対象を選択中なら残りの先頭へ切り替え」を同じトランザクションで行う。途中失敗では所属が残り、再実行できる（理由は `docs/decisions.md`）
 - **モック（複数チーム所属）**：チームを離れる・登録削除するときは、同じ書き込みで「`members/{uid}` の削除」「`users/{uid}.teamIds` から対象チームだけを削除し、選択中なら残りのチームへ切り替え」「その人が持っている用具の `holderUid` を `null` に」をまとめて行う
-- 複数チーム所属・チーム削除は現時点ではモックのみ。Firestore 版は1人1チームのまま動作し、未対応の操作（別チームへの切り替え・2つ目のチームへの参加・チーム削除）は理由を示すエラーにする（`docs/decisions.md`）
+- Firebase 版も複数所属・削除に対応する（#24）。削除中の状態と再開手順は本書末尾を参照。
 
 ## セキュリティルールの方針
 
@@ -104,3 +107,11 @@ teams/{teamId}/equipmentNames/{nameKey}
 ## Firestore実装と検証
 
 `src/data/firebase/` にSDK実装、`firestore.rules` にセキュリティルール、`tests/firestore.test.ts` にエミュレータの拒否テストと統合テストを置く。起動・アカウントの扱い・追加フィールドと制約は `docs/firebase.md` を参照。用具名のNFKC正規化はSDKで行い、ルール言語の制約上、改変クライアントのUnicode互換文字すべてを同一視する保証はしない。
+
+## Firebase の複数所属・チーム削除（#24）
+
+所属索引は最大20件。旧 `teamId` のみのプロフィールを読み込め、認証復元時に `teamIds` を追加する。参加・作成は名前と所属を同時に保存する。`users.displayName` はアカウント名のまま保持し、チームのメンバー名との一致は要求しない。
+
+削除は `deletionUid` の保存 → 各予定のメモ → 各予定 → 用具 → 用具名予約 → 参加コード／非公開コード → 各メンバーの所属更新と削除 → 削除者の所属・メンバー・チーム親の同時削除の順。最大100件の清掃バッチを用い、メンバーのプロフィールは1人ずつ最新値を再確認する。全員の他チームへの所属と選択状態を保存し、対象が選択中の場合だけ残りの先頭へ切り替える。
+
+削除中も所属者はチームの状態を読めるが、通常の書き込みは不可。清掃は開始者のみが可能。親と開始者の所属が残るので、通信失敗後も画面から再実行できる。詳細と旧版データの制約は `docs/decisions.md` を参照。
