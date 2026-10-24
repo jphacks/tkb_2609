@@ -25,19 +25,17 @@ function JoinCodeSection() {
   const repo = useRepository()
   const { team } = useSession()
   const { run, confirm, toast } = useFeedback()
-  const [revealed, setRevealed] = useState(false)
   const [busy, setBusy] = useState(false)
-  const code = useSubscription<string | null>(revealed ? (cb) => repo.teams.subscribeJoinCode(team.id, cb) : null, [
-    team.id,
-    revealed,
-  ])
+  // 設定タブを開いたら最初から表示する（#43）。読み取りは管理者が設定タブを開いている間の1件だけ
+  const code = useSubscription<string | null>((cb) => repo.teams.subscribeJoinCode(team.id, cb), [team.id])
   const codeInput = useRef<HTMLInputElement>(null)
   const [manualCopy, setManualCopy] = useState(false)
 
+  // LINE の共有リンクは1回に1つのメッセージしか送れないため、URL と参加コードを2回に分けて送る（#42）。
+  // コードだけのメッセージにすると、受け取った人が長押しでコピーしやすい
   const appUrl = `${location.origin}/?openExternalBrowser=1`
-  const shareText = `「${team.name}」の BUKATSU に参加してください。\n参加コード：${code}\n${appUrl}`
-
-  const reveal = () => setRevealed(true)
+  const urlMessage = `「${team.name}」の BUKATSU に参加してください。アプリを開き、次に送る参加コードを入力してください。\n${appUrl}`
+  const lineShareUrl = (text: string) => `https://line.me/R/share?text=${encodeURIComponent(text)}`
 
   const copy = async () => {
     if (!code) return
@@ -69,11 +67,7 @@ function JoinCodeSection() {
     <section className={styles.section}>
       <h2 className="section-title">参加コード（管理者）</h2>
       <div className={`card ${styles.codeCard}`}>
-        {!revealed ? (
-          <button className="btn btn-secondary btn-block" onClick={reveal}>
-            参加コードを表示
-          </button>
-        ) : !code ? (
+        {!code ? (
           <p role="status">参加コードを取得中です。取得できない場合は再取得してください。</p>
         ) : (
           <>
@@ -85,14 +79,16 @@ function JoinCodeSection() {
               </button>
             </div>
             {manualCopy && <p className="hint">自動コピーが許可されていません。コードを長押しして「コピー」、または Ctrl/Cmd+C でコピーしてください。</p>}
-            <a
-              className={`btn btn-block ${styles.lineButton}`}
-              href={`https://line.me/R/share?text=${encodeURIComponent(shareText)}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              LINE で共有
-            </a>
+            <div className={styles.lineShare}>
+              <p className={styles.lineShareTitle}>LINE で共有（2回に分けて送ります）</p>
+              <a className={`btn btn-block ${styles.lineButton}`} href={lineShareUrl(urlMessage)} target="_blank" rel="noreferrer">
+                ① アプリの URL を送る
+              </a>
+              <a className={`btn btn-block ${styles.lineButton}`} href={lineShareUrl(code)} target="_blank" rel="noreferrer">
+                ② 参加コードを送る
+              </a>
+              <p className="hint">① のあと同じトークに ② を送ると、コードだけのメッセージになり、長押しでコピーしやすくなります。</p>
+            </div>
             <button className={`btn btn-ghost btn-sm ${styles.danger}`} onClick={regenerate} disabled={busy}>
               コードを再発行
             </button>
