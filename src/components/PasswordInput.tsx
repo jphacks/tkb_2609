@@ -1,6 +1,8 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { EyeIcon, EyeOffIcon } from './icons'
 import styles from './PasswordInput.module.css'
+
+type Selection = [start: number, end: number, direction: 'forward' | 'backward' | 'none']
 
 /**
  * 表示・非表示を切り替えられるパスワード入力（#33）。打ち間違いに気づけるようにする。
@@ -21,20 +23,39 @@ export function PasswordInput({
   const id = useId()
   const input = useRef<HTMLInputElement>(null)
   const [visible, setVisible] = useState(false)
-  // type を切り替えるとカーソルが末尾へ移るブラウザがあるため、切り替え前の位置に戻す
-  const selection = useRef<[number, number] | null>(null)
+  // ボタンを押す直前にパスワード欄を使っていたか。type を切り替えるとカーソルが末尾へ移るブラウザがあるため、位置も覚えておく
+  const restore = useRef<Selection | null>(null)
 
   useLayoutEffect(() => {
-    const el = input.current
-    if (!el || !selection.current || document.activeElement !== el) return
-    el.setSelectionRange(...selection.current)
-    selection.current = null
+    const el = input.current,
+      selection = restore.current
+    restore.current = null
+    if (!el || !selection) return
+    // タップでフォーカスが外れる端末もあるため、押す前に使っていたなら戻す（キーボードを閉じない）
+    if (document.activeElement !== el) el.focus({ preventScroll: true })
+    el.setSelectionRange(...selection)
   }, [visible])
 
-  const toggle = () => {
+  // 送信するときは非表示に戻す。表示のまま送ると、パスワード管理機能が保存を提案しないことがあり、
+  // ログインに失敗したときもパスワードが画面に見えたままになる
+  useEffect(() => {
+    const el = input.current,
+      form = el?.form
+    if (!el || !form) return
+    const hide = () => {
+      el.type = 'password'
+      setVisible(false)
+    }
+    form.addEventListener('submit', hide, true)
+    return () => form.removeEventListener('submit', hide, true)
+  }, [])
+
+  const remember = () => {
     const el = input.current
-    if (el && document.activeElement === el) selection.current = [el.selectionStart ?? el.value.length, el.selectionEnd ?? el.value.length]
-    setVisible((v) => !v)
+    restore.current =
+      el && document.activeElement === el
+        ? [el.selectionStart ?? el.value.length, el.selectionEnd ?? el.value.length, el.selectionDirection ?? 'none']
+        : null
   }
 
   return (
@@ -57,15 +78,17 @@ export function PasswordInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
+        {/* 名前は固定し、表示中かどうかは aria-pressed で伝える（名前と状態が食い違って読み上げられないように） */}
         <button
           type="button"
           className={`icon-btn ${styles.toggle}`}
-          aria-label={visible ? 'パスワードを隠す' : 'パスワードを表示'}
+          aria-label="パスワードを表示"
           aria-pressed={visible}
           aria-controls={id}
-          // 押してもパスワード欄からフォーカスを外さない（キーボードを閉じない）
+          // 押してもパスワード欄からフォーカスを外さない。外れる端末でも、切り替えたあとに戻す
+          onPointerDown={remember}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={toggle}
+          onClick={() => setVisible((v) => !v)}
         >
           {visible ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
         </button>
