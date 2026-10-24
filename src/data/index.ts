@@ -12,11 +12,11 @@ try {
     selected = mock
     reset = () => mock.reset()
   } else if (backend === 'firebase') {
-    const [{ createFirebaseClient }, { createFirestoreRepository }] = await Promise.all([
-      import('./firebase/client'),
+    // Firebase の初期化（設定の読み込み・エミュレータ接続）は firebase/app.ts に一本化している
+    const [{ auth, db }, { createFirestoreRepository }] = await Promise.all([
+      import('./firebase/app'),
       import('./firebase/firestoreRepository'),
     ])
-    const { auth, db } = createFirebaseClient()
     selected = createFirestoreRepository(auth, db)
   } else {
     throw new Error('VITE_DATA_BACKEND は mock または firebase を指定してください。')

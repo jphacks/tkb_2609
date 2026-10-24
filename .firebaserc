@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "demo-bukatsu",
+    "prod": "bukatsu20261024"
+  }
+}

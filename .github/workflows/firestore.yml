@@ -26,5 +26,5 @@ jobs:
       - run: npm run build
         env:
           VITE_DATA_BACKEND: firebase
-          VITE_USE_FIREBASE_EMULATORS: 'true'
+          VITE_USE_EMULATOR: 'true'
       - run: npm test

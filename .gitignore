@@ -28,8 +28,9 @@ dist-ssr
 .env.*
 !.env.example
 
-# Local emulator/runtime assets
-work/
+# Firebase
 .firebase/
-*-debug.log
-firestore-debug.log
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+.emulator-data/
