@@ -9,12 +9,16 @@ export function MyItemsWidget({ items }: { items: EquipmentItem[] }) {
   const repo = useRepository()
   const { team } = useSession()
   const { run } = useFeedback()
-  const [busyId, setBusyId] = useState<string | null>(null)
+  const [busyIds, setBusyIds] = useState(new Set<string>())
 
   const release = async (item: EquipmentItem) => {
-    setBusyId(item.id)
+    setBusyIds((previous) => new Set(previous).add(item.id))
     await run(() => repo.equipment.release(team.id, item.id), `${item.name}を手放しました`)
-    setBusyId(null)
+    setBusyIds((previous) => {
+      const next = new Set(previous)
+      next.delete(item.id)
+      return next
+    })
   }
 
   return (
@@ -32,11 +36,16 @@ export function MyItemsWidget({ items }: { items: EquipmentItem[] }) {
           </button>
         </div>
       ) : (
-        <ul className={styles.widgetList}>
+        <ul className={styles.widgetList} tabIndex={0} aria-label="所持用具の一覧">
           {items.map((item) => (
             <li key={item.id} className={styles.widgetRow}>
               <span className={styles.widgetName}>{item.name}</span>
-              <button className="btn btn-secondary btn-sm" disabled={busyId === item.id} onClick={() => release(item)}>
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={busyIds.has(item.id)}
+                aria-label={`${item.name}を手放す`}
+                onClick={() => release(item)}
+              >
                 手放す
               </button>
             </li>

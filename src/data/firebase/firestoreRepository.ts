@@ -1,3 +1,4 @@
+import { eventTypesError } from '../../lib/eventTypes'
 import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
@@ -34,7 +35,7 @@ import {
   type Firestore,
   type Query,
 } from 'firebase/firestore'
-import { equipmentNameKey } from '../../lib/equipment'
+import { equipmentNameError, equipmentNameKey } from '../../lib/equipment'
 import { generateJoinCode, normalizeJoinCode } from '../../lib/joinCode'
 import { isStrongPassword } from '../../lib/password'
 import type { EquipmentItem, EventInput, EventNote, Member, Team, TeamEvent, UserProfile } from '../../types'
@@ -86,6 +87,8 @@ const itemFrom = (s: DocumentSnapshot): EquipmentItem => {
   const d = s.data()!
   return { id: s.id, name: d.name, holderUid: d.holderUid, holderName: d.holderName, updatedAt: asDate(d.updatedAt) }
 }
+
+class ChangedPossession extends Error {}
 
 export function createFirestoreRepository(auth: Auth, db: Firestore): Repository {
   const errors = new Set<(error: RepositoryError) => void>()
@@ -161,7 +164,12 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
       updatedAt: serverTimestamp(),
     }
   }
-  async function changeHolder(t: string, i: string, operation: 'hold' | 'release' | 'force') {
+  async function changeHolder(
+    t: string,
+    i: string,
+    operation: 'hold' | 'release' | 'force',
+    expectedHolderUid?: string,
+  ) {
     const actorUid = uid()
     await runTransaction(db, async (tx) => {
       const ref = itemRef(t, i),
@@ -170,6 +178,8 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
       const d = item.data(),
         actor = await tx.get(memberRef(t, actorUid))
       if (!actor.exists()) throw new RepositoryError('このチームのメンバーではありません。')
+      if (expectedHolderUid !== undefined && d.holderUid !== expectedHolderUid)
+        throw new RepositoryError('持ち主が変わりました。最新の状態を確認してください。')
       if (operation === 'hold' && d.holderUid) throw new RepositoryError('この用具はすでに持たれています。')
       if (operation === 'release' && d.holderUid !== actorUid) throw new RepositoryError('自分の用具のみ手放せます。')
       if (operation === 'force' && actor.data().role !== 'admin') throw new RepositoryError('管理者のみ操作できます。')
@@ -269,20 +279,42 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
       },
       updateDisplayName: safe(async (displayName) => {
         const u = uid(),
-          name = requiredText(displayName, 40),
-          profile = await getDoc(userRef(u))
-        const t = profile.data()?.teamId as string | null
-        const items = t
-          ? await getDocs(query(collection(db, 'teams', t, 'equipment'), where('holderUid', '==', u)))
-          : null
-        const batch = writeBatch(db)
-        batch.update(userRef(u), { displayName: name })
-        if (t) batch.update(memberRef(t, u), { displayName: name })
-        items?.docs.forEach((item) => batch.update(item.ref, { holderName: name, updatedAt: serverTimestamp() }))
-        await batch.commit()
+          name = requiredText(displayName, 40)
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const profile = await getDoc(userRef(u))
+          const t = profile.data()?.teamId as string | null
+          const items = t
+            ? await getDocs(query(collection(db, 'teams', t, 'equipment'), where('holderUid', '==', u)))
+            : null
+          try {
+            await runTransaction(db, async (tx) => {
+              const current = await tx.get(userRef(u))
+              if (current.data()?.teamId !== t) throw new ChangedPossession()
+              const member = t ? await tx.get(memberRef(t, u)) : null
+              const held = await Promise.all((items?.docs ?? []).map((item) => tx.get(item.ref)))
+              if (
+                t &&
+                (!member?.exists() ||
+                  member.data().heldCount !== held.length ||
+                  held.some((item) => !item.exists() || item.data().holderUid !== u))
+              )
+                throw new ChangedPossession()
+              tx.update(current.ref, { displayName: name })
+              if (member) tx.update(member.ref, { displayName: name })
+              held.forEach((item) => tx.update(item.ref, { holderName: name, updatedAt: serverTimestamp() }))
+            })
+            return
+          } catch (error) {
+            if (!(error instanceof ChangedPossession)) throw error
+          }
+        }
+        throw new RepositoryError('用具の状態が変わりました。再取得して名前を保存してください。')
       }),
     },
     teams: {
+      subscribeJoinCode(t, cb) {
+        return watchDoc(privateRef(t), (s) => (s.exists() ? (s.data().code as string) : null), cb, null)
+      },
       create: safe(async (name) => {
         const u = uid(),
           nameValue = requiredText(name, 60),
@@ -356,14 +388,8 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
         await runTransaction(db, async (tx) => {
           const team = await tx.get(teamRef(t)),
             next = { ...team.data()!.settings, ...settings }
-          if (
-            next.eventTypes.length < 1 ||
-            next.eventTypes.length > 10 ||
-            next.eventTypes.some(
-              (type: { label: string; color: string }) => !type.label.trim() || !/^#[0-9a-f]{6}$/i.test(type.color),
-            )
-          )
-            throw new RepositoryError('種類は1〜10件、名前と色を設定してください。')
+          const validation = eventTypesError(next.eventTypes)
+          if (validation) throw new RepositoryError(validation)
           tx.update(team.ref, { settings: next })
         })
       }),
@@ -537,15 +563,13 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
       }),
       hold: safe((t, i) => changeHolder(t, i, 'hold')),
       release: safe((t, i) => changeHolder(t, i, 'release')),
-      forceRelease: safe((t, i) => changeHolder(t, i, 'force')),
+      forceRelease: safe((t, i, expected) => changeHolder(t, i, 'force', expected)),
     },
   }
   return repository
 }
 function validName(input: string) {
-  const name = requiredText(input.normalize('NFKC'), 100),
-    key = equipmentNameKey(name)
-  if (!key || key.includes('/') || key === '.' || key === '..' || key.startsWith('__'))
-    throw new RepositoryError('用具名にこの文字は使えません。')
-  return name
+  const error = equipmentNameError(input)
+  if (error) throw new RepositoryError(error)
+  return input.normalize('NFKC').trim()
 }

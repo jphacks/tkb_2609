@@ -1,0 +1,328 @@
+// @vitest-environment jsdom
+import type { ReactNode } from 'react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { RepositoryContext, SessionContext, type Session } from '../src/app/contexts'
+import { RefreshProvider } from '../src/app/RefreshProvider'
+import { FeedbackContext, type Feedback } from '../src/components/feedback/context'
+import { createMockRepository } from '../src/data/mock/mockRepository'
+import { EquipmentTab } from '../src/features/equipment/EquipmentTab'
+import { MyItemsWidget } from '../src/features/equipment/MyItemsWidget'
+import { SettingsTab } from '../src/features/settings/SettingsTab'
+import type { EquipmentItem } from '../src/types'
+vi.mock('../src/data', () => ({ isMock: false, resetMockData: vi.fn() }))
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+  localStorage.clear()
+})
+const baseSession = (): Session => {
+  const me = { uid: 'admin', displayName: '管理者', role: 'admin' as const, joinedAt: new Date() }
+  return {
+    user: { uid: 'admin', email: 'admin@example.invalid' },
+    profile: { uid: 'admin', displayName: '管理者', teamId: 'team' },
+    team: {
+      id: 'team',
+      name: 'テストチーム',
+      createdBy: 'admin',
+      createdAt: new Date(),
+      settings: { eventEditPolicy: 'admins', eventTypes: [{ id: 'practice', label: '練習', color: '#2563eb' }] },
+    },
+    members: [me, { uid: 'member', displayName: 'メンバー', role: 'member', joinedAt: new Date() }],
+    me,
+    isAdmin: true,
+    canEditEvents: true,
+  }
+}
+const equipment = (id: string, name: string, holderUid: string | null = null): EquipmentItem => ({
+  id,
+  name,
+  holderUid,
+  holderName: holderUid,
+  updatedAt: new Date(),
+})
+function stream<T>(value: T) {
+  const listeners = new Set<(v: T) => void>()
+  return {
+    subscribe: vi.fn((cb: (v: T) => void) => {
+      listeners.add(cb)
+      cb(value)
+      return () => {
+        listeners.delete(cb)
+      }
+    }),
+    emit(next: T) {
+      value = next
+      act(() => listeners.forEach((cb) => cb(next)))
+    },
+    count: () => listeners.size,
+  }
+}
+function harness() {
+  let session = baseSession()
+  const repo = createMockRepository()
+  const feedback: Feedback = {
+    toast: vi.fn(),
+    confirm: vi.fn(async () => true),
+    run: vi.fn(async (action) => {
+      try {
+        await action()
+        return true
+      } catch {
+        return false
+      }
+    }),
+  }
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <RepositoryContext.Provider value={repo}>
+        <SessionContext.Provider value={session}>
+          <RefreshProvider>
+            <FeedbackContext.Provider value={feedback}>{children}</FeedbackContext.Provider>
+          </RefreshProvider>
+        </SessionContext.Provider>
+      </RepositoryContext.Provider>
+    )
+  }
+  return {
+    repo,
+    feedback,
+    wrapper: Wrapper,
+    session: () => session,
+    update: (next: Session) => {
+      session = next
+    },
+  }
+}
+describe('equipment UI', () => {
+  it('sorts free items first, calls hold, shows own items and follows current holder in an open menu', async () => {
+    const h = harness(),
+      items = stream([equipment('held', 'アラーム', 'member'), equipment('b', 'タイマー'), equipment('a', 'ケース')])
+    h.repo.equipment.subscribe = (_teamId, cb) => items.subscribe(cb)
+    h.repo.equipment.hold = vi.fn(async () => {})
+    h.repo.equipment.forceRelease = vi.fn(async () => {})
+    const user = userEvent.setup()
+    render(<EquipmentTab />, { wrapper: h.wrapper })
+    expect(screen.getAllByRole('group').map((e) => e.getAttribute('aria-label'))).toEqual([
+      'ケース',
+      'タイマー',
+      'アラーム',
+    ])
+    await user.click(screen.getByRole('button', { name: 'ケースを持つ' }))
+    expect(h.repo.equipment.hold).toHaveBeenCalledWith('team', 'a')
+    await user.click(screen.getByRole('button', { name: 'アラームのメニュー' }))
+    items.emit([equipment('held', 'アラーム', 'other'), equipment('b', 'タイマー'), equipment('a', 'ケース', 'admin')])
+    expect(screen.getByRole('region', { name: 'あなたが持っている用具' }).textContent).toContain('ケース')
+    await user.click(screen.getByRole('button', { name: 'otherさんから手放させる（管理者）' }))
+    expect(h.repo.equipment.forceRelease).toHaveBeenCalledWith('team', 'held', 'other')
+  })
+  it('requires confirmation for forced release and deletion; members never see force release', async () => {
+    const h = harness(),
+      items = stream([equipment('held', 'ケース', 'member')])
+    h.repo.equipment.subscribe = (_teamId, cb) => items.subscribe(cb)
+    h.repo.equipment.forceRelease = vi.fn(async () => {})
+    h.repo.equipment.remove = vi.fn(async () => {})
+    vi.mocked(h.feedback.confirm).mockResolvedValue(false)
+    const user = userEvent.setup(),
+      view = render(<EquipmentTab />, { wrapper: h.wrapper })
+    await user.click(screen.getByRole('button', { name: 'ケースのメニュー' }))
+    await user.click(screen.getByRole('button', { name: /さんから手放させる/ }))
+    expect(h.repo.equipment.forceRelease).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'ケースのメニュー' }))
+    await user.click(screen.getByRole('button', { name: '削除' }))
+    expect(h.repo.equipment.remove).not.toHaveBeenCalled()
+    h.update({ ...h.session(), isAdmin: false, me: { ...h.session().me, role: 'member' } })
+    view.rerender(<EquipmentTab />)
+    await user.click(screen.getByRole('button', { name: 'ケースのメニュー' }))
+    expect(screen.queryByRole('button', { name: /さんから手放させる/ })).toBeNull()
+  })
+  it('rejects duplicate names and detects remote edits without overwriting unsaved input', async () => {
+    const h = harness(),
+      items = stream([equipment('a', 'ケース'), equipment('b', 'コーン')])
+    h.repo.equipment.subscribe = (_teamId, cb) => items.subscribe(cb)
+    h.repo.equipment.update = vi.fn(async () => {})
+    const user = userEvent.setup()
+    render(<EquipmentTab />, { wrapper: h.wrapper })
+    await user.click(screen.getByRole('button', { name: 'ケースのメニュー' }))
+    await user.click(screen.getByRole('button', { name: '名前を編集' }))
+    const input = screen.getByLabelText('用具名')
+    await user.clear(input)
+    await user.type(input, 'ｺｰﾝ')
+    expect(screen.getByRole('button', { name: '保存する' }).hasAttribute('disabled')).toBe(true)
+    await user.clear(input)
+    await user.type(input, '新しいケース')
+    items.emit([equipment('a', '他の人の変更'), equipment('b', 'コーン')])
+    expect((input as HTMLInputElement).value).toBe('新しいケース')
+    expect(screen.getByRole('button', { name: '保存する' }).hasAttribute('disabled')).toBe(true)
+    await user.click(screen.getByRole('button', { name: '最新の名前に戻す' }))
+    expect((input as HTMLInputElement).value).toBe('他の人の変更')
+  })
+  it('keeps all in-flight release buttons disabled independently', async () => {
+    const h = harness(),
+      releases: (() => void)[] = []
+    h.repo.equipment.release = vi.fn(() => new Promise<void>((resolve) => releases.push(resolve)))
+    const user = userEvent.setup()
+    render(<MyItemsWidget items={[equipment('a', 'ケース', 'admin'), equipment('b', 'タイマー', 'admin')]} />, {
+      wrapper: h.wrapper,
+    })
+    await user.click(screen.getByRole('button', { name: 'ケースを手放す' }))
+    await user.click(screen.getByRole('button', { name: 'タイマーを手放す' }))
+    expect(screen.getByRole('button', { name: 'ケースを手放す' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'タイマーを手放す' }).hasAttribute('disabled')).toBe(true)
+    await act(async () => {
+      releases[0]()
+    })
+    expect(screen.getByRole('button', { name: 'タイマーを手放す' }).hasAttribute('disabled')).toBe(true)
+    await act(async () => {
+      releases[1]()
+    })
+  })
+})
+describe('settings UI', () => {
+  it('subscribes to the private code only after reveal and displays remote regeneration', async () => {
+    const h = harness(),
+      codes = stream<string | null>('ABCD2345')
+    h.repo.teams.subscribeJoinCode = (_teamId, cb) => codes.subscribe(cb)
+    h.repo.teams.regenerateJoinCode = vi.fn(async () => 'K7MPX2QA')
+    const user = userEvent.setup(),
+      view = render(<SettingsTab />, { wrapper: h.wrapper })
+    expect(codes.count()).toBe(0)
+    await user.click(screen.getByRole('button', { name: '参加コードを表示' }))
+    expect(codes.count()).toBe(1)
+    codes.emit('K7MPX2QA')
+    expect(screen.getByText('K7MPX2QA')).toBeTruthy()
+    const link = screen.getByRole('link', { name: 'LINE で共有' }).getAttribute('href')!
+    expect(decodeURIComponent(link)).toContain('K7MPX2QA')
+    expect(decodeURIComponent(link)).toContain('openExternalBrowser=1')
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => {}) } })
+    await user.click(screen.getByRole('button', { name: '参加コードをコピー' }))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('K7MPX2QA')
+    vi.mocked(h.feedback.confirm).mockResolvedValue(false)
+    await user.click(screen.getByRole('button', { name: 'コードを再発行' }))
+    expect(h.repo.teams.regenerateJoinCode).not.toHaveBeenCalled()
+    h.update({ ...h.session(), isAdmin: false, me: { ...h.session().me, role: 'member' } })
+    view.rerender(<SettingsTab />)
+    expect(codes.count()).toBe(0)
+    expect(screen.queryByText('K7MPX2QA')).toBeNull()
+  })
+  it('applies remote event types when clean but preserves dirty drafts until explicitly reloaded', async () => {
+    const h = harness(),
+      user = userEvent.setup(),
+      view = render(<SettingsTab />, { wrapper: h.wrapper })
+    const source = () => h.session().team.settings.eventTypes[0]
+    h.update({
+      ...h.session(),
+      team: {
+        ...h.session().team,
+        settings: { ...h.session().team.settings, eventTypes: [{ ...source(), label: '更新済み' }] },
+      },
+    })
+    view.rerender(<SettingsTab />)
+    const input = screen.getByRole('textbox', { name: '種類の名前' })
+    expect((input as HTMLInputElement).value).toBe('更新済み')
+    await user.clear(input)
+    await user.type(input, '編集中')
+    h.update({
+      ...h.session(),
+      team: {
+        ...h.session().team,
+        settings: { ...h.session().team.settings, eventTypes: [{ ...source(), label: '別の変更' }] },
+      },
+    })
+    view.rerender(<SettingsTab />)
+    expect((input as HTMLInputElement).value).toBe('編集中')
+    expect(screen.getByText('別の管理者が予定の種類を変更しました。')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: '最新の種類を読み直す' }))
+    expect((input as HTMLInputElement).value).toBe('別の変更')
+  })
+  it('uses latest member roles in open menus and prevents removing the last admin', async () => {
+    const h = harness(),
+      user = userEvent.setup(),
+      view = render(<SettingsTab />, { wrapper: h.wrapper })
+    await user.click(screen.getByRole('button', { name: '管理者さんのメニュー' }))
+    expect(screen.getByRole('button', { name: '管理者権限を外す' }).hasAttribute('disabled')).toBe(true)
+    fireEvent.click(screen.getByRole('dialog').parentElement!)
+    await user.click(screen.getByRole('button', { name: 'メンバーさんのメニュー' }))
+    h.update({
+      ...h.session(),
+      members: h.session().members.map((m) => (m.uid === 'member' ? { ...m, role: 'admin' } : m)),
+    })
+    view.rerender(<SettingsTab />)
+    expect(screen.getByRole('button', { name: '管理者権限を外す' }).hasAttribute('disabled')).toBe(false)
+    h.update({ ...h.session(), isAdmin: false })
+    view.rerender(<SettingsTab />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+  it('saves own display name, follows remote names and confirms logout', async () => {
+    const h = harness(),
+      user = userEvent.setup()
+    h.repo.users.updateDisplayName = vi.fn(async () => {})
+    h.repo.auth.signOut = vi.fn(async () => {})
+    const view = render(<SettingsTab />, { wrapper: h.wrapper })
+    const input = screen.getByLabelText('名前')
+    await user.clear(input)
+    await user.type(input, '新しい名前')
+    await user.click(within(input.closest('form')!).getByRole('button', { name: '保存' }))
+    expect(h.repo.users.updateDisplayName).toHaveBeenCalledWith('新しい名前')
+    h.update({ ...h.session(), me: { ...h.session().me, displayName: '新しい名前' } })
+    view.rerender(<SettingsTab />)
+    expect(within(input.closest('form')!).queryByRole('button', { name: '保存' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'ログアウト' }))
+    await waitFor(() => expect(h.repo.auth.signOut).toHaveBeenCalledTimes(1))
+  })
+})
+
+describe('settings and equipment writes', () => {
+  it('saves edit policy and event type name/color through the repository', async () => {
+    const h = harness(),
+      user = userEvent.setup()
+    h.repo.teams.updateSettings = vi.fn(async () => {})
+    render(<SettingsTab />, { wrapper: h.wrapper })
+    await user.click(screen.getByRole('radio', { name: '全員' }))
+    expect(h.repo.teams.updateSettings).toHaveBeenCalledWith('team', { eventEditPolicy: 'all' })
+    const input = screen.getByRole('textbox', { name: '種類の名前' })
+    await user.clear(input)
+    await user.type(input, '集合')
+    await user.click(screen.getByRole('radio', { name: '#e8590c' }))
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    expect(h.repo.teams.updateSettings).toHaveBeenCalledWith('team', {
+      eventTypes: [{ id: 'practice', label: '集合', color: '#e8590c' }],
+    })
+  })
+  it('creates, edits and confirms deletion of equipment', async () => {
+    const h = harness(),
+      user = userEvent.setup(),
+      items = stream<EquipmentItem[]>([])
+    h.repo.equipment.subscribe = (_t, cb) => items.subscribe(cb)
+    h.repo.equipment.add = vi.fn(async () => 'a')
+    h.repo.equipment.update = vi.fn(async () => {})
+    h.repo.equipment.remove = vi.fn(async () => {})
+    render(<EquipmentTab />, { wrapper: h.wrapper })
+    await user.click(screen.getByRole('button', { name: '追加' }))
+    await user.type(screen.getByLabelText('用具名'), 'ｹｰｽ')
+    await user.click(screen.getByRole('button', { name: '追加する' }))
+    expect(h.repo.equipment.add).toHaveBeenCalledWith('team', { name: 'ケース' })
+    items.emit([equipment('a', 'ケース')])
+    await user.click(screen.getByRole('button', { name: 'ケースのメニュー' }))
+    await user.click(screen.getByRole('button', { name: '名前を編集' }))
+    await user.clear(screen.getByLabelText('用具名'))
+    await user.type(screen.getByLabelText('用具名'), '収納ケース')
+    await user.click(screen.getByRole('button', { name: '保存する' }))
+    expect(h.repo.equipment.update).toHaveBeenCalledWith('team', 'a', { name: '収納ケース' })
+    await user.click(screen.getByRole('button', { name: 'ケースのメニュー' }))
+    await user.click(screen.getByRole('button', { name: '削除' }))
+    expect(h.feedback.confirm).toHaveBeenCalled()
+    expect(h.repo.equipment.remove).toHaveBeenCalledWith('team', 'a')
+  })
+  it('grants an admin role only after confirmation', async () => {
+    const h = harness(),
+      user = userEvent.setup()
+    h.repo.teams.setRole = vi.fn(async () => {})
+    render(<SettingsTab />, { wrapper: h.wrapper })
+    await user.click(screen.getByRole('button', { name: 'メンバーさんのメニュー' }))
+    await user.click(screen.getByRole('button', { name: '管理者にする' }))
+    expect(h.feedback.confirm).toHaveBeenCalled()
+    expect(h.repo.teams.setRole).toHaveBeenCalledWith('team', 'member', 'admin')
+  })
+})

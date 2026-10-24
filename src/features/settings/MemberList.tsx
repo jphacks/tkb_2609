@@ -11,12 +11,14 @@ const collator = new Intl.Collator('ja')
 /** メンバー一覧。管理者は各メンバーのメニューから権限の変更と登録削除ができる */
 export function MemberList() {
   const { members, user, isAdmin } = useSession()
-  const [selected, setSelected] = useState<Member | null>(null)
+  const [selectedUid, setSelectedUid] = useState<string | null>(null)
+  const selected = members.find((member) => member.uid === selectedUid)
 
   const sorted = useMemo(
     () =>
       [...members].sort(
-        (a, b) => (a.role === b.role ? 0 : a.role === 'admin' ? -1 : 1) || collator.compare(a.displayName, b.displayName),
+        (a, b) =>
+          (a.role === b.role ? 0 : a.role === 'admin' ? -1 : 1) || collator.compare(a.displayName, b.displayName),
       ),
     [members],
   )
@@ -38,7 +40,7 @@ export function MemberList() {
             {isAdmin && (
               <button
                 className={`icon-btn ${styles.memberMore}`}
-                onClick={() => setSelected(member)}
+                onClick={() => setSelectedUid(member.uid)}
                 aria-label={`${member.displayName}さんのメニュー`}
               >
                 <MoreIcon size={20} />
@@ -48,7 +50,7 @@ export function MemberList() {
         ))}
       </ul>
 
-      {selected && <MemberMenu member={selected} onClose={() => setSelected(null)} />}
+      {isAdmin && selected && <MemberMenu member={selected} onClose={() => setSelectedUid(null)} />}
     </section>
   )
 }
@@ -65,7 +67,9 @@ function MemberMenu({ member, onClose }: { member: Member; onClose(): void }) {
     onClose()
     const toAdmin = member.role === 'member'
     const ok = await confirm({
-      title: toAdmin ? `${member.displayName}さんを管理者にしますか？` : `${member.displayName}さんの管理者権限を外しますか？`,
+      title: toAdmin
+        ? `${member.displayName}さんを管理者にしますか？`
+        : `${member.displayName}さんの管理者権限を外しますか？`,
       message: toAdmin ? '管理者は参加コードやチームの設定を変更できます。' : undefined,
       confirmLabel: toAdmin ? '管理者にする' : '外す',
       danger: !toAdmin,
@@ -77,11 +81,13 @@ function MemberMenu({ member, onClose }: { member: Member; onClose(): void }) {
     onClose()
     const ok = await confirm({
       title: `${member.displayName}さんの登録を削除しますか？`,
-      message: '引退・退部などでチームから外します。持っている用具は手放した状態になります。もう一度参加するには参加コードが必要です。',
+      message:
+        '引退・退部などでチームから外します。持っている用具は手放した状態になります。もう一度参加するには参加コードが必要です。',
       confirmLabel: '登録削除',
       danger: true,
     })
-    if (ok) await run(() => repo.teams.removeMember(team.id, member.uid), `${member.displayName}さんの登録を削除しました`)
+    if (ok)
+      await run(() => repo.teams.removeMember(team.id, member.uid), `${member.displayName}さんの登録を削除しました`)
   }
 
   return (

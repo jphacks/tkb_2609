@@ -1,17 +1,11 @@
+import { eventTypesError } from '../../lib/eventTypes'
 // メモリ上で動くモック実装。localStorage に保存するので、リロードしてもデータとログイン状態が残る。
 // 権限チェックは Firestore セキュリティルールで行う予定の内容（docs/data-model.md）と揃えている。
 // 別タブで変更すると storage イベントで反映されるので、リアルタイム更新の確認にも使える。
 
-import { isDuplicateEquipmentName } from '../../lib/equipment'
+import { equipmentNameError, isDuplicateEquipmentName } from '../../lib/equipment'
 import { generateJoinCode, normalizeJoinCode } from '../../lib/joinCode'
-import type {
-  EquipmentItem,
-  EventNote,
-  Member,
-  Team,
-  TeamEvent,
-  UserProfile,
-} from '../../types'
+import type { EquipmentItem, EventNote, Member, Team, TeamEvent, UserProfile } from '../../types'
 import { RepositoryError, type Repository, type Unsubscribe } from '../repository'
 import { createSeed } from './seed'
 
@@ -187,7 +181,9 @@ export function createMockRepository(): Repository & { reset(): void } {
   }
 
   function validEquipmentName(team: StoredTeam, name: string, exceptId?: string): string {
-    const trimmed = name.trim()
+    const inputError = equipmentNameError(name)
+    if (inputError) throw new RepositoryError(inputError)
+    const trimmed = name.normalize('NFKC').trim()
     if (!trimmed) throw new RepositoryError('用具名を入力してください')
     if (isDuplicateEquipmentName(Object.values(team.equipment), trimmed, exceptId)) {
       throw new RepositoryError(`「${trimmed}」はすでに登録されています`)
@@ -273,6 +269,12 @@ export function createMockRepository(): Repository & { reset(): void } {
     },
 
     teams: {
+      subscribeJoinCode(teamId, cb) {
+        return watch(
+          () => (db.teams[teamId]?.members[currentUid ?? '']?.role === 'admin' ? db.teams[teamId].joinCode : null),
+          cb,
+        )
+      },
       async create(name) {
         await sleep(LATENCY_MS)
         const uid = requireUid()
@@ -343,7 +345,10 @@ export function createMockRepository(): Repository & { reset(): void } {
       async updateSettings(teamId, settings) {
         await sleep(LATENCY_MS)
         const { team } = requireAdmin(teamId)
-        team.settings = { ...team.settings, ...settings }
+        const next = { ...team.settings, ...settings }
+        const validation = eventTypesError(next.eventTypes)
+        if (validation) throw new RepositoryError(validation)
+        team.settings = next
         commit()
       },
 
@@ -416,7 +421,13 @@ export function createMockRepository(): Repository & { reset(): void } {
         team.events[id] = { id, ...input, attendance: {}, createdBy: uid, updatedAt: new Date(), notes: {} }
         if (initialNote?.trim()) {
           const noteId = newId()
-          team.events[id].notes[noteId] = { id: noteId, authorUid: uid, authorName: team.members[uid].displayName, body: initialNote.trim(), createdAt: new Date() }
+          team.events[id].notes[noteId] = {
+            id: noteId,
+            authorUid: uid,
+            authorName: team.members[uid].displayName,
+            body: initialNote.trim(),
+            createdAt: new Date(),
+          }
         }
         commit()
         return id
@@ -530,10 +541,12 @@ export function createMockRepository(): Repository & { reset(): void } {
         commit()
       },
 
-      async forceRelease(teamId, itemId) {
+      async forceRelease(teamId, itemId, expectedHolderUid) {
         await sleep(LATENCY_MS)
         const { team } = requireAdmin(teamId)
         const item = requireItem(team, itemId)
+        if (expectedHolderUid !== undefined && item.holderUid !== expectedHolderUid)
+          throw new RepositoryError('持ち主が変わりました。最新の状態を確認してください。')
         Object.assign(item, { holderUid: null, holderName: null, updatedAt: new Date() })
         commit()
       },

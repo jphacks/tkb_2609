@@ -1,5 +1,7 @@
+import { eventTypesError } from '../../lib/eventTypes'
 import { useState, type CSSProperties } from 'react'
 import { useRepository, useSession } from '../../app/contexts'
+import { useSubscription } from '../../app/useSubscription'
 import { useFeedback } from '../../components/feedback/context'
 import { CopyIcon, PlusIcon, TrashIcon } from '../../components/icons'
 import type { EventEditPolicy, EventType } from '../../types'
@@ -22,14 +24,20 @@ function JoinCodeSection() {
   const repo = useRepository()
   const { team } = useSession()
   const { run, confirm, toast } = useFeedback()
-  const [code, setCode] = useState<string | null>(null)
+  const [revealed, setRevealed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const code = useSubscription<string | null>(revealed ? (cb) => repo.teams.subscribeJoinCode(team.id, cb) : null, [
+    team.id,
+    revealed,
+  ])
 
   const appUrl = `${location.origin}/?openExternalBrowser=1`
   const shareText = `「${team.name}」の Bukatsu に参加してください。\n参加コード：${code}\n${appUrl}`
 
-  const reveal = () => run(async () => setCode(await repo.teams.getJoinCode(team.id)))
+  const reveal = () => setRevealed(true)
 
   const copy = async () => {
+    if (!code) return
     try {
       await navigator.clipboard.writeText(code ?? '')
       toast('参加コードをコピーしました')
@@ -45,17 +53,22 @@ function JoinCodeSection() {
       confirmLabel: '再発行',
       danger: true,
     })
-    if (ok) await run(async () => setCode(await repo.teams.regenerateJoinCode(team.id)), '参加コードを再発行しました')
+    if (!ok || busy) return
+    setBusy(true)
+    await run(() => repo.teams.regenerateJoinCode(team.id), '参加コードを再発行しました')
+    setBusy(false)
   }
 
   return (
     <section className={styles.section}>
       <h2 className="section-title">参加コード（管理者）</h2>
       <div className={`card ${styles.codeCard}`}>
-        {code === null ? (
+        {!revealed ? (
           <button className="btn btn-secondary btn-block" onClick={reveal}>
             参加コードを表示
           </button>
+        ) : !code ? (
+          <p role="status">参加コードを取得中です。取得できない場合は再取得してください。</p>
         ) : (
           <>
             <div className={styles.codeRow}>
@@ -72,7 +85,7 @@ function JoinCodeSection() {
             >
               LINE で共有
             </a>
-            <button className={`btn btn-ghost btn-sm ${styles.danger}`} onClick={regenerate}>
+            <button className={`btn btn-ghost btn-sm ${styles.danger}`} onClick={regenerate} disabled={busy}>
               コードを再発行
             </button>
           </>
@@ -88,10 +101,13 @@ function EditPolicySection() {
   const { team } = useSession()
   const { run } = useFeedback()
   const policy = team.settings.eventEditPolicy
+  const [busy, setBusy] = useState(false)
 
-  const change = (next: EventEditPolicy) => {
-    if (next !== policy) {
-      run(() => repo.teams.updateSettings(team.id, { eventEditPolicy: next }), '予定の編集権限を変更しました')
+  const change = async (next: EventEditPolicy) => {
+    if (next !== policy && !busy) {
+      setBusy(true)
+      await run(() => repo.teams.updateSettings(team.id, { eventEditPolicy: next }), '予定の編集権限を変更しました')
+      setBusy(false)
     }
   }
 
@@ -99,10 +115,10 @@ function EditPolicySection() {
     <section className={styles.section}>
       <h2 className="section-title">予定を編集できる人（管理者）</h2>
       <div className={styles.segment} role="radiogroup">
-        <button role="radio" aria-checked={policy === 'admins'} onClick={() => change('admins')}>
+        <button role="radio" disabled={busy} aria-checked={policy === 'admins'} onClick={() => change('admins')}>
           管理者のみ
         </button>
-        <button role="radio" aria-checked={policy === 'all'} onClick={() => change('all')}>
+        <button role="radio" disabled={busy} aria-checked={policy === 'all'} onClick={() => change('all')}>
           全員
         </button>
       </div>
@@ -114,10 +130,19 @@ function EventTypesSection() {
   const repo = useRepository()
   const { team } = useSession()
   const { run } = useFeedback()
-  const [types, setTypes] = useState<EventType[]>(team.settings.eventTypes)
+  const source = team.settings.eventTypes
+  const remoteKey = JSON.stringify(source)
+  const [draft, setDraft] = useState({ base: remoteKey, types: source })
+  const draftKey = JSON.stringify(draft.types)
+  const dirty = draftKey !== draft.base && draftKey !== remoteKey
+  const types = dirty ? draft.types : source
+  const conflict = dirty && draft.base !== remoteKey
+  const setTypes = (change: (previous: EventType[]) => EventType[]) =>
+    setDraft({ base: dirty ? draft.base : remoteKey, types: change(types) })
   const [busy, setBusy] = useState(false)
   const changed = JSON.stringify(types) !== JSON.stringify(team.settings.eventTypes)
-  const valid = types.length > 0 && types.every((t) => t.label.trim())
+  const validation = eventTypesError(types)
+  const valid = validation === null
 
   const patch = (index: number, value: Partial<EventType>) =>
     setTypes((prev) => prev.map((t, i) => (i === index ? { ...t, ...value } : t)))
@@ -129,6 +154,7 @@ function EventTypesSection() {
     ])
 
   const save = async () => {
+    if (busy || conflict || !valid) return
     setBusy(true)
     const eventTypes = types.map((t) => ({ ...t, label: t.label.trim() }))
     await run(() => repo.teams.updateSettings(team.id, { eventTypes }), '予定の種類を保存しました')
@@ -143,6 +169,7 @@ function EventTypesSection() {
           <div key={type.id} className={styles.typeRow}>
             <input
               className="input"
+              maxLength={40}
               value={type.label}
               onChange={(e) => patch(index, { label: e.target.value })}
               placeholder="種類の名前"
@@ -172,12 +199,21 @@ function EventTypesSection() {
             </div>
           </div>
         ))}
+        {changed && validation && <p className="error-text">{validation}</p>}
+        {conflict && (
+          <div role="alert">
+            <p>別の管理者が予定の種類を変更しました。</p>
+            <button className="btn btn-secondary" onClick={() => setDraft({ base: remoteKey, types: source })}>
+              最新の種類を読み直す
+            </button>
+          </div>
+        )}
         <div className={styles.typeActions}>
-          <button className="btn btn-ghost btn-sm" onClick={add}>
+          <button className="btn btn-ghost btn-sm" onClick={add} disabled={types.length >= 10 || busy}>
             <PlusIcon size={18} />
             種類を追加
           </button>
-          <button className="btn btn-primary btn-sm" disabled={!changed || !valid || busy} onClick={save}>
+          <button className="btn btn-primary btn-sm" disabled={!changed || !valid || busy || conflict} onClick={save}>
             保存
           </button>
         </div>

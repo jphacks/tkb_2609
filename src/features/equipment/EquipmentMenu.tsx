@@ -19,7 +19,8 @@ export function EquipmentMenu({ item, onEdit, onClose }: { item: EquipmentItem; 
       confirmLabel: '手放させる',
       danger: true,
     })
-    if (ok) await run(() => repo.equipment.forceRelease(team.id, item.id), `${item.name}を手放させました`)
+    if (ok)
+      await run(() => repo.equipment.forceRelease(team.id, item.id, item.holderUid!), `${item.name}を手放させました`)
   }
 
   const remove = async () => {
