@@ -41,8 +41,28 @@ export interface Session {
 
 export const SessionContext = createContext<Session | null>(null)
 
+/** 所属チームの切り替えと追加。複数チームに対応したリポジトリのときだけ提供する（#59） */
+export interface TeamNavigation {
+  teams: Team[]
+  select(teamId: string): void
+  /** チームの参加・作成の画面を開く */
+  add(): void
+}
+
+export const TeamNavigationContext = createContext<TeamNavigation | null>(null)
+
+export const useTeamNavigation = () => useContext(TeamNavigationContext)
+
 export function useSession(): Session {
   const session = useContext(SessionContext)
   if (!session) throw new Error('SessionContext がありません')
   return session
+}
+
+/**
+ * 切り替え先があるか（2チーム以上に所属し、一覧に表示中のチームが含まれている）。
+ * 参加・作成の直後は、所属の一覧の読み込みが表示中のチームに追いついていないことがあり、その間は出さない
+ */
+export function canSwitchTeam(navigation: TeamNavigation | null, teamId: string): navigation is TeamNavigation {
+  return !!navigation && navigation.teams.length > 1 && navigation.teams.some((t) => t.id === teamId)
 }

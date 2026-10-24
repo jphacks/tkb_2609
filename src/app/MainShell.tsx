@@ -1,13 +1,14 @@
-import { useState, type ComponentType } from 'react'
+import type { ComponentType } from 'react'
 import { BoxIcon, CalendarIcon, GearIcon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import { EquipmentTab } from '../features/equipment/EquipmentTab'
 import { ScheduleTab } from '../features/schedule/ScheduleTab'
 import { SettingsTab } from '../features/settings/SettingsTab'
 import styles from './app.module.css'
-import { useSession } from './contexts'
+import { canSwitchTeam, useSession, useTeamNavigation } from './contexts'
+import { TeamSelect } from './TeamSelect'
 
-type TabId = 'schedule' | 'equipment' | 'settings'
+export type TabId = 'schedule' | 'equipment' | 'settings'
 
 const TABS: { id: TabId; label: string; Icon: ComponentType<{ size?: number }> }[] = [
   { id: 'schedule', label: '予定', Icon: CalendarIcon },
@@ -15,14 +16,23 @@ const TABS: { id: TabId; label: string; Icon: ComponentType<{ size?: number }> }
   { id: 'settings', label: '設定', Icon: GearIcon },
 ]
 
-export function MainShell() {
+/** 表示中のタブは呼び出し側で持つ。チームの切り替えや「チームを追加」から戻ったあとも同じタブを開くため（#59） */
+export function MainShell({ tab, onTabChange: setTab }: { tab: TabId; onTabChange(tab: TabId): void }) {
   const { team } = useSession()
-  const [tab, setTab] = useState<TabId>('schedule')
+  const navigation = useTeamNavigation()
 
   return (
     <div className={styles.shell}>
       <div className={styles.headerArea}>
-        <PageHeader title={team.name} />
+        {/* 2チーム以上に所属しているときは、チーム名の位置で切り替える（#59） */}
+        <PageHeader
+          title={team.name}
+          titleControl={
+            canSwitchTeam(navigation, team.id) ? (
+              <TeamSelect teamId={team.id} teamName={team.name} variant="header" />
+            ) : undefined
+          }
+        />
       </div>
 
       <main className={styles.content}>
