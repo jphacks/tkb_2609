@@ -7,10 +7,11 @@ import type { UserProfile } from '../../types'
 import styles from './auth.module.css'
 
 /** チームに未所属のユーザー向け。参加コードで参加するか、チームを作る */
-export function TeamEntryScreen({ profile }: { profile: UserProfile }) {
+export function TeamEntryScreen({ profile, onDone }: { profile: UserProfile; onDone?: () => void }) {
   const repo = useRepository()
   const { run } = useFeedback()
   const [mode, setMode] = useState<'join' | 'create'>('join')
+  const [displayName, setDisplayName] = useState('')
   const [code, setCode] = useState('')
   const [teamName, setTeamName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -21,8 +22,9 @@ export function TeamEntryScreen({ profile }: { profile: UserProfile }) {
     setBusy(true)
     setError(null)
     try {
-      if (mode === 'join') await repo.teams.join(code)
-      else await repo.teams.create(teamName)
+      if (mode === 'join') await repo.teams.join(code, displayName)
+      else await repo.teams.create(teamName, displayName)
+      onDone?.()
     } catch (err) {
       setError(err instanceof RepositoryError ? err.message : '通信に失敗しました')
       setBusy(false)
@@ -46,6 +48,12 @@ export function TeamEntryScreen({ profile }: { profile: UserProfile }) {
       </div>
 
       <form className={styles.form} onSubmit={submit}>
+        <label className="field">
+          <span className="label">このチームでの名前</span>
+          <input className="input" required maxLength={50} value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)} placeholder="チーム内で使う名前" />
+          <span className="hint">チームごとに別の名前を使えます。参加後も設定から変更できます。</span>
+        </label>
         {mode === 'join' ? (
           <label className="field">
             <span className="label">参加コード</span>
@@ -83,6 +91,7 @@ export function TeamEntryScreen({ profile }: { profile: UserProfile }) {
       </form>
 
       <div className={styles.switch}>
+        {onDone && <button className="btn btn-secondary btn-block" disabled={busy} onClick={onDone}>戻る</button>}
         <button className="btn btn-ghost btn-sm" onClick={() => run(() => repo.auth.signOut())}>
           ログアウト
         </button>
