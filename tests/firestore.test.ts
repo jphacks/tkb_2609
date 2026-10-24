@@ -284,15 +284,15 @@ describe('Firestore repository against Auth + Firestore emulators', () => {
   it('creates and joins teams, scopes data, rotates codes and persists membership on sign-in', async () => {
     const a = await client(),
       b = await client(),
-      t = await a.teams.create('新しいチーム')
+      t = await a.teams.create('新しいチーム', 'テスト')
     const code = await a.teams.getJoinCode(t)
-    expect(await b.teams.join(code.toLowerCase())).toBe(t)
+    expect(await b.teams.join(code.toLowerCase(), 'テスト')).toBe(t)
     expect((await waitFor<Team | null>((cb) => b.teams.subscribe(t, cb)))?.name).toBe('新しいチーム')
     await expect(b.teams.rename(t, '無権限')).rejects.toThrow()
     const next = await a.teams.regenerateJoinCode(t)
     const c = await client()
-    await expect(c.teams.join(code)).rejects.toThrow()
-    expect(await c.teams.join(next)).toBe(t)
+    await expect(c.teams.join(code, 'テスト')).rejects.toThrow()
+    expect(await c.teams.join(next, 'テスト')).toBe(t)
     await a.teams.rename(t, '更新済み')
     const renamed = await waitFor<Team | null>(
       (cb) => b.teams.subscribe(t, cb),
@@ -300,14 +300,14 @@ describe('Firestore repository against Auth + Firestore emulators', () => {
     )
     expect(renamed?.name).toBe('更新済み')
     const second = await client(),
-      other = await second.teams.create('別チーム')
+      other = await second.teams.create('別チーム', 'テスト')
     expect(await waitFor<TeamEvent[]>((cb) => second.events.subscribeUpcoming(other, cb))).toEqual([])
   })
   it('queries today onward in order; writes attendance per UID and initial notes atomically', async () => {
     const a = await client(),
-      t = await a.teams.create('予定チーム'),
+      t = await a.teams.create('予定チーム', 'テスト'),
       b = await client()
-    await b.teams.join(await a.teams.getJoinCode(t))
+    await b.teams.join(await a.teams.getJoinCode(t), 'テスト')
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
     const later = new Date(tomorrow)
@@ -355,16 +355,16 @@ describe('Firestore repository against Auth + Firestore emulators', () => {
   })
   it('allows only one concurrent holder; updates name copies and detaches safely', async () => {
     const a = await client(),
-      t = await a.teams.create('用具チーム'),
+      t = await a.teams.create('用具チーム', 'テスト'),
       b = await client()
-    await b.teams.join(await a.teams.getJoinCode(t))
+    await b.teams.join(await a.teams.getJoinCode(t), 'テスト')
     const item = await a.equipment.add(t, { name: 'タイマー' })
     await expect(b.equipment.add(t, { name: ' ﾀｲﾏｰ ' })).rejects.toThrow()
     const holds = await Promise.allSettled([a.equipment.hold(t, item), b.equipment.hold(t, item)])
     expect(holds.filter((h) => h.status === 'fulfilled')).toHaveLength(1)
     await a.equipment.forceRelease(t, item)
     await b.equipment.hold(t, item)
-    await b.users.updateDisplayName('新しい表示名')
+    await b.users.updateDisplayName(t, '新しい表示名')
     expect(
       (
         await waitFor<EquipmentItem[]>(
@@ -422,9 +422,9 @@ describe('additional consistency guarantees', () => {
   })
   it('keeps at least one admin when another admin is removed', async () => {
     const a = await client(),
-      t = await a.teams.create('権限チーム'),
+      t = await a.teams.create('権限チーム', 'テスト'),
       b = await client()
-    await b.teams.join(await a.teams.getJoinCode(t))
+    await b.teams.join(await a.teams.getJoinCode(t), 'テスト')
     const me = await waitFor<AuthUser | null>(
       (cb) => a.auth.onAuthStateChanged(cb),
       (u) => u !== null,
@@ -446,7 +446,7 @@ describe('additional consistency guarantees', () => {
   })
   it('retains profile/team on repeat sign-in without requiring another join code', async () => {
     const r = await client(),
-      t = await r.teams.create('再ログインチーム')
+      t = await r.teams.create('再ログインチーム', 'テスト')
     const user = await waitFor<AuthUser | null>(
       (cb) => r.auth.onAuthStateChanged(cb),
       (u) => u !== null,
@@ -464,7 +464,7 @@ describe('additional consistency guarantees', () => {
   })
   it('cleans up more than one batch of notes and can retry deletion', async () => {
     const r = await client(),
-      t = await r.teams.create('大量メモチーム')
+      t = await r.teams.create('大量メモチーム', 'テスト')
     const e = await r.events.create(t, { title: '予定', typeId: 'practice', startAt: new Date(), place: null })
     await env.withSecurityRulesDisabled(async (ctx) => {
       const db = ctx.firestore() as unknown as Firestore,
@@ -490,9 +490,9 @@ describe('additional consistency guarantees', () => {
 describe('concurrent changes and subscription errors', () => {
   it('never demotes both admins in competing requests', async () => {
     const a = await client(),
-      t = await a.teams.create('並行権限チーム'),
+      t = await a.teams.create('並行権限チーム', 'テスト'),
       b = await client()
-    await b.teams.join(await a.teams.getJoinCode(t))
+    await b.teams.join(await a.teams.getJoinCode(t), 'テスト')
     const ua = await waitFor<AuthUser | null>(
       (cb) => a.auth.onAuthStateChanged(cb),
       (u) => u !== null,
@@ -515,9 +515,9 @@ describe('concurrent changes and subscription errors', () => {
   })
   it('deletes equipment held by another member without corrupting the possession counter', async () => {
     const a = await client(),
-      t = await a.teams.create('削除チーム'),
+      t = await a.teams.create('削除チーム', 'テスト'),
       b = await client()
-    await b.teams.join(await a.teams.getJoinCode(t))
+    await b.teams.join(await a.teams.getJoinCode(t), 'テスト')
     const item = await a.equipment.add(t, { name: 'ケース' })
     await a.equipment.hold(t, item)
     await b.equipment.remove(t, item)
@@ -551,8 +551,8 @@ describe('equipment/settings realtime integration (#9–#11)', () => {
   it('delivers member and holder name updates to a listener on another client', async () => {
     const a = await client(),
       b = await client(),
-      t = await a.teams.create('更新チーム')
-    await b.teams.join(await a.teams.getJoinCode(t))
+      t = await a.teams.create('更新チーム', 'テスト')
+    await b.teams.join(await a.teams.getJoinCode(t), 'テスト')
     const item = await a.equipment.add(t, { name: 'ケース' })
     const held = waitFor<EquipmentItem[]>(
       (cb) => a.equipment.subscribe(t, cb),
@@ -568,7 +568,7 @@ describe('equipment/settings realtime integration (#9–#11)', () => {
       (cb) => a.equipment.subscribe(t, cb),
       (items) => items[0]?.holderName === '新しい名前',
     )
-    await b.users.updateDisplayName('新しい名前')
+    await b.users.updateDisplayName(t, '新しい名前')
     await Promise.all([changedMember, changedItem])
     await a.equipment.update(t, item, { name: '収納ケース' })
     await expect(b.equipment.add(t, { name: '収納ｹｰｽ' })).rejects.toThrow()
@@ -579,8 +579,8 @@ describe('equipment/settings realtime integration (#9–#11)', () => {
   it('refuses forced release if the owner changed after confirmation opened', async () => {
     const a = await client(),
       b = await client(),
-      t = await a.teams.create('確認チーム')
-    await b.teams.join(await a.teams.getJoinCode(t))
+      t = await a.teams.create('確認チーム', 'テスト')
+    await b.teams.join(await a.teams.getJoinCode(t), 'テスト')
     const item = await a.equipment.add(t, { name: 'タイマー' })
     const ub = await waitFor<AuthUser | null>(
       (cb) => b.auth.onAuthStateChanged(cb),
@@ -596,9 +596,9 @@ describe('equipment/settings realtime integration (#9–#11)', () => {
   it('propagates private code regeneration between admins but denies member subscription', async () => {
     const a = await client(),
       b = await client(),
-      t = await a.teams.create('招待チーム')
+      t = await a.teams.create('招待チーム', 'テスト')
     const old = await a.teams.getJoinCode(t)
-    await b.teams.join(old)
+    await b.teams.join(old, 'テスト')
     const ub = await waitFor<AuthUser | null>(
       (cb) => b.auth.onAuthStateChanged(cb),
       (u) => u !== null,
@@ -626,15 +626,46 @@ describe('equipment/settings realtime integration (#9–#11)', () => {
 describe('display name concurrency (#10)', () => {
   it('keeps holderName consistent when taking equipment races with changing the display name', async () => {
     const a = await client(),
-      t = await a.teams.create('名前更新チーム')
+      t = await a.teams.create('名前更新チーム', 'テスト')
     const first = await a.equipment.add(t, { name: 'ケース' }),
       second = await a.equipment.add(t, { name: 'タイマー' })
     await a.equipment.hold(t, first)
-    await Promise.all([a.users.updateDisplayName('更新後の名前'), a.equipment.hold(t, second)])
+    await Promise.all([a.users.updateDisplayName(t, '更新後の名前'), a.equipment.hold(t, second)])
     const items = await waitFor<EquipmentItem[]>(
       (cb) => a.equipment.subscribe(t, cb),
       (list) => list.length === 2 && list.every((i) => i.holderName === '更新後の名前'),
     )
     expect(items.every((i) => i.holderName === '更新後の名前')).toBe(true)
+  })
+})
+
+// PR #21 で Repository が複数チーム所属に対応したが、Firebase 版は当面1人1チームのまま動かす
+describe('Firestore repository: single-team behavior behind the multi-team interface', () => {
+  it('uses the team display name, lists only the current team and rejects unsupported operations', async () => {
+    const a = await client(),
+      b = await client()
+    const me = (await waitFor<AuthUser | null>((cb) => b.auth.onAuthStateChanged(cb), (u) => !!u))!
+    const t = await a.teams.create('単一チーム', '管理者の名前')
+    expect((await waitFor<Member[]>((cb) => a.teams.subscribeMembers(t, cb)))[0].displayName).toBe('管理者の名前')
+
+    expect(await waitFor<Team[]>((cb) => b.teams.subscribeMine(cb))).toEqual([])
+    await b.teams.join(await a.teams.getJoinCode(t), 'チームでの名前')
+    const mine = await waitFor<Team[]>((cb) => b.teams.subscribeMine(cb), (teams) => teams.length === 1)
+    expect(mine.map((team) => team.id)).toEqual([t])
+    const profile = await waitFor<UserProfile | null>((cb) => b.users.subscribeProfile(me.uid, cb))
+    expect(profile).toMatchObject({ teamIds: [t], teamId: t, displayName: 'チームでの名前' })
+    const members = await waitFor<Member[]>((cb) => a.teams.subscribeMembers(t, cb), (m) => m.length === 2)
+    expect(members.find((m) => m.uid === me.uid)?.displayName).toBe('チームでの名前')
+
+    await expect(b.teams.select(t)).resolves.toBeUndefined()
+    await expect(b.teams.select('other-team')).rejects.toThrow('まだ対応していません')
+    const c = await client(),
+      other = await c.teams.create('別のチーム', '別の人')
+    await expect(b.teams.join(await c.teams.getJoinCode(other), '二つ目')).rejects.toThrow('まだ対応していません')
+    await expect(a.teams.remove(t)).rejects.toThrow('まだ対応していません')
+    await expect(b.users.updateDisplayName('other-team', '名前')).rejects.toThrow('まだ対応していません')
+
+    await b.teams.leave(t)
+    expect(await waitFor<Team[]>((cb) => b.teams.subscribeMine(cb), (teams) => teams.length === 0)).toEqual([])
   })
 })

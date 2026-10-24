@@ -63,6 +63,16 @@
 }
 
 .code {
+  width: min(100%, 230px);
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: center;
+  user-select: text;
+  -webkit-user-select: text;
   font-size: 30px;
   font-weight: 800;
   letter-spacing: 0.16em;

@@ -48,8 +48,12 @@ const requiredText = (value: string, max: number) => {
   return text
 }
 const asDate = (value: Timestamp): Date => value?.toDate() ?? new Date()
+// Firebase 版は1人1チーム（複数チーム所属はモックのみ。docs/decisions.md）
 const profileFrom = (s: DocumentSnapshot): UserProfile | null =>
-  s.exists() ? { uid: s.id, displayName: s.data().displayName, teamId: s.data().teamId } : null
+  s.exists()
+    ? { uid: s.id, displayName: s.data().displayName, teamIds: s.data().teamId ? [s.data().teamId] : [], teamId: s.data().teamId }
+    : null
+const NOT_SUPPORTED = 'Firebase 版では、複数チームへの所属とチームの削除にまだ対応していません。'
 const memberFrom = (s: DocumentSnapshot): Member => ({
   uid: s.id,
   displayName: s.data()!.displayName,
@@ -105,6 +109,16 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
   const uid = () => {
     if (!auth.currentUser) throw new RepositoryError('ログインしてください。')
     return auth.currentUser.uid
+  }
+  /**
+   * 参加・作成時の「このチームでの名前」をプロフィールに保存する。
+   * ルールはメンバーの名前とプロフィールの名前の一致を求め、所属と名前を同じ書き込みで変えることを許さないため、先に名前だけを更新する
+   */
+  const saveTeamDisplayName = async (u: string, displayName: string) => {
+    const name = requiredText(displayName, 40),
+      profile = await getDoc(userRef(u))
+    if (profile.data()?.teamId !== null) throw new RepositoryError(NOT_SUPPORTED)
+    if (profile.data()?.displayName !== name) await updateDoc(userRef(u), { displayName: name })
   }
   const teamRef = (t: string) => doc(db, 'teams', t)
   const memberRef = (t: string, u: string) => doc(db, 'teams', t, 'members', u)
@@ -277,9 +291,10 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
       subscribeProfile(u, cb) {
         return watchDoc(userRef(u), profileFrom, cb, null)
       },
-      updateDisplayName: safe(async (displayName) => {
+      updateDisplayName: safe(async (teamId, displayName) => {
         const u = uid(),
           name = requiredText(displayName, 40)
+        if ((await getDoc(userRef(u))).data()?.teamId !== teamId) throw new RepositoryError(NOT_SUPPORTED)
         for (let attempt = 0; attempt < 4; attempt++) {
           const profile = await getDoc(userRef(u))
           const t = profile.data()?.teamId as string | null
@@ -312,18 +327,48 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
       }),
     },
     teams: {
+      remove: safe(async () => {
+        throw new RepositoryError(NOT_SUPPORTED)
+      }),
+      subscribeMine(cb) {
+        // 所属は users/{uid}.teamId の1チームのみ。プロフィールを購読し、所属チームが変わったら張り替える
+        const u = auth.currentUser?.uid
+        if (!u) {
+          cb([])
+          return () => {}
+        }
+        let current: string | null | undefined
+        let offTeam: Unsubscribe | undefined
+        const offProfile = repository.users.subscribeProfile(u, (profile) => {
+          const t = profile?.teamId ?? null
+          if (t === current) return
+          current = t
+          offTeam?.()
+          offTeam = undefined
+          if (!t) return cb([])
+          offTeam = repository.teams.subscribe(t, (team) => cb(team ? [team] : []))
+        })
+        return () => {
+          offProfile()
+          offTeam?.()
+        }
+      },
+      select: safe(async (t) => {
+        if ((await getDoc(userRef(uid()))).data()?.teamId !== t) throw new RepositoryError(NOT_SUPPORTED)
+      }),
       subscribeJoinCode(t, cb) {
         return watchDoc(privateRef(t), (s) => (s.exists() ? (s.data().code as string) : null), cb, null)
       },
-      create: safe(async (name) => {
+      create: safe(async (name, displayName) => {
         const u = uid(),
           nameValue = requiredText(name, 60),
           ref = doc(collection(db, 'teams'))
+        await saveTeamDisplayName(u, displayName)
         for (let attempt = 0; attempt < 5; attempt++) {
           const code = generateJoinCode()
           const created = await runTransaction(db, async (tx) => {
             const [profile, existing] = await Promise.all([tx.get(userRef(u)), tx.get(codeRef(code))])
-            if (profile.data()?.teamId !== null) throw new RepositoryError('すでにチームに参加しています。')
+            if (profile.data()?.teamId !== null) throw new RepositoryError(NOT_SUPPORTED)
             if (existing.exists()) return false
             tx.set(ref, {
               name: nameValue,
@@ -355,15 +400,17 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
         }
         throw new RepositoryError('コードを発行できませんでした。もう一度お試しください。')
       }),
-      join: safe(async (codeInput) => {
+      join: safe(async (codeInput, displayName) => {
         const code = normalizeJoinCode(codeInput),
           u = uid()
         if (!/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/.test(code))
           throw new RepositoryError('参加コードを確認してください。')
+        if (!(await getDoc(codeRef(code))).exists()) throw new RepositoryError('参加コードが正しくありません。')
+        await saveTeamDisplayName(u, displayName)
         return runTransaction(db, async (tx) => {
           const [profile, join] = await Promise.all([tx.get(userRef(u)), tx.get(codeRef(code))])
           if (!join.exists()) throw new RepositoryError('参加コードが正しくありません。')
-          if (profile.data()?.teamId !== null) throw new RepositoryError('すでにチームに参加しています。')
+          if (profile.data()?.teamId !== null) throw new RepositoryError(NOT_SUPPORTED)
           const t = join.data().teamId as string
           tx.set(memberRef(t, u), {
             displayName: profile.data()!.displayName,

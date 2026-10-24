@@ -81,5 +81,7 @@ export interface AuthUser {
 export interface UserProfile {
   uid: string
   displayName: string
+  teamIds: string[]
+  /** 現在選択中のチーム */
   teamId: string | null
 }

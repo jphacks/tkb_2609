@@ -115,8 +115,8 @@ export function createSeed(): MockDb {
       'u-newcomer': { uid: 'u-newcomer', email: 'newcomer@example.com', password: MOCK_PASSWORD },
     },
     users: {
-      ...Object.fromEntries(MEMBERS.map(([uid, displayName]) => [uid, { displayName, teamId: TEAM_ID }])),
-      'u-newcomer': { displayName: '新入 部員', teamId: null },
+      ...Object.fromEntries(MEMBERS.map(([uid, displayName]) => [uid, { displayName, teamIds: [TEAM_ID], teamId: TEAM_ID }])),
+      'u-newcomer': { displayName: '新入 部員', teamIds: [], teamId: null },
     },
     joinCodes: { K7MPX2QA: TEAM_ID },
     teams: {

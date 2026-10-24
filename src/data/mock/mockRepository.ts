@@ -22,7 +22,7 @@ interface StoredTeam extends Omit<Team, 'id'> {
 
 export interface MockDb {
   accounts: Record<string, { uid: string; email: string; password: string }>
-  users: Record<string, { displayName: string; teamId: string | null }>
+  users: Record<string, Omit<UserProfile, 'uid'>>
   /** 参加コード → teamId */
   joinCodes: Record<string, string>
   teams: Record<string, StoredTeam>
@@ -34,7 +34,8 @@ const SESSION_KEY = 'bukatsu:mock-session:v1'
 const LATENCY_MS = 150
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-const newId = () => crypto.randomUUID()
+// 同じ Wi-Fi の HTTP プレビューでも動く（randomUUID は HTTPS 限定）。
+const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
 
 // 名前が "At" で終わる項目は日時として復元する
 function reviveDates(key: string, value: unknown) {
@@ -62,7 +63,13 @@ function loadDb(): MockDb {
   const raw = readStorage(DB_KEY)
   if (raw) {
     try {
-      return JSON.parse(raw, reviveDates) as MockDb
+      const db = JSON.parse(raw, reviveDates) as MockDb
+      // v2 の単一所属データも、実際のメンバー情報から移行する。
+      for (const [uid, user] of Object.entries(db.users)) {
+        user.teamIds = Object.keys(db.teams).filter((id) => !!db.teams[id].members[uid])
+        if (!user.teamId || !user.teamIds.includes(user.teamId)) user.teamId = user.teamIds[0] ?? null
+      }
+      return db
     } catch {
       // 壊れていたら初期データに戻す
     }
@@ -177,7 +184,11 @@ export function createMockRepository(): Repository & { reset(): void } {
       if (item.holderUid === uid) Object.assign(item, { holderUid: null, holderName: null, updatedAt: new Date() })
     }
     delete team.members[uid]
-    if (db.users[uid]) db.users[uid].teamId = null
+    const user = db.users[uid]
+    if (user) {
+      user.teamIds = user.teamIds.filter((id) => db.teams[id] !== team)
+      if (user.teamId && db.teams[user.teamId] === team) user.teamId = user.teamIds[0] ?? null
+    }
   }
 
   function validEquipmentName(team: StoredTeam, name: string, exceptId?: string): string {
@@ -192,6 +203,7 @@ export function createMockRepository(): Repository & { reset(): void } {
   }
 
   return {
+    supports: { multipleTeams: true, deleteTeam: true },
     reset() {
       db = createSeed()
       commit()
@@ -217,7 +229,7 @@ export function createMockRepository(): Repository & { reset(): void } {
         }
         const uid = newId()
         db.accounts[uid] = { uid, email: normalized, password }
-        db.users[uid] = { displayName: displayName.trim(), teamId: null }
+        db.users[uid] = { displayName: displayName.trim(), teamIds: [], teamId: null }
         commit()
         setSession(uid)
       },
@@ -250,14 +262,12 @@ export function createMockRepository(): Repository & { reset(): void } {
         }, cb)
       },
 
-      async updateDisplayName(displayName) {
+      async updateDisplayName(teamId, displayName) {
         await sleep(LATENCY_MS)
-        const uid = requireUid()
+        const { uid, team } = requireMember(teamId)
         const name = displayName.trim()
         if (!name) throw new RepositoryError('名前を入力してください')
-        const user = db.users[uid]
-        user.displayName = name
-        const team = user.teamId ? db.teams[user.teamId] : undefined
+        // アカウント名と他チームの表示名には影響させない。
         if (team) {
           if (team.members[uid]) team.members[uid].displayName = name
           for (const item of Object.values(team.equipment)) {
@@ -275,10 +285,38 @@ export function createMockRepository(): Repository & { reset(): void } {
           cb,
         )
       },
-      async create(name) {
+      async remove(teamId) {
+        await sleep(LATENCY_MS)
+        requireAdmin(teamId)
+        // 選択中のチームは各ユーザーの残りの所属へ切り替える。
+        for (const user of Object.values(db.users)) {
+          user.teamIds = user.teamIds.filter((id) => id !== teamId)
+          if (user.teamId === teamId) user.teamId = user.teamIds[0] ?? null
+        }
+        for (const [code, id] of Object.entries(db.joinCodes)) {
+          if (id === teamId) delete db.joinCodes[code]
+        }
+        delete db.teams[teamId]
+        commit()
+      },
+      subscribeMine(cb) {
+        // ログアウト直後に通知が来ても例外で他の購読を止めないよう、requireUid は使わない
+        return watch(() => {
+          const uid = currentUid ?? ''
+          return Object.entries(db.teams).filter(([, team]) => !!team.members[uid])
+            .map(([id, { name, createdBy, createdAt, settings }]) => ({ id, name, createdBy, createdAt, settings }))
+        }, cb)
+      },
+      async select(teamId) {
+        const { uid } = requireMember(teamId)
+        db.users[uid].teamId = teamId
+        commit()
+      },
+      async create(name, displayName) {
         await sleep(LATENCY_MS)
         const uid = requireUid()
-        if (db.users[uid].teamId) throw new RepositoryError('すでにチームに参加しています')
+        if (!displayName.trim()) throw new RepositoryError('このチームでの名前を入力してください')
+        if (!name.trim()) throw new RepositoryError('チーム名を入力してください')
         const teamId = newId()
         const now = new Date()
         db.teams[teamId] = {
@@ -293,28 +331,31 @@ export function createMockRepository(): Repository & { reset(): void } {
             ],
           },
           joinCode: '',
-          members: { [uid]: { uid, displayName: db.users[uid].displayName, role: 'admin', joinedAt: now } },
+          members: { [uid]: { uid, displayName: displayName.trim(), role: 'admin', joinedAt: now } },
           events: {},
           equipment: {},
         }
         db.teams[teamId].joinCode = issueJoinCode(teamId)
+        db.users[uid].teamIds.push(teamId)
         db.users[uid].teamId = teamId
         commit()
         return teamId
       },
 
-      async join(code) {
+      async join(code, displayName) {
         await sleep(LATENCY_MS)
         const uid = requireUid()
-        if (db.users[uid].teamId) throw new RepositoryError('すでにチームに参加しています')
+        if (!displayName.trim()) throw new RepositoryError('このチームでの名前を入力してください')
         const teamId = db.joinCodes[normalizeJoinCode(code)]
         if (!teamId) throw new RepositoryError('参加コードが正しくありません')
+        if (db.teams[teamId].members[uid]) throw new RepositoryError('このチームにはすでに参加しています')
         db.teams[teamId].members[uid] = {
           uid,
-          displayName: db.users[uid].displayName,
+          displayName: displayName.trim(),
           role: 'member',
           joinedAt: new Date(),
         }
+        db.users[uid].teamIds.push(teamId)
         db.users[uid].teamId = teamId
         commit()
         return teamId
