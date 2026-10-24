@@ -22,7 +22,9 @@ import {
   collection,
   connectFirestoreEmulator,
   deleteDoc,
+  disableNetwork,
   doc,
+  enableNetwork,
   getDoc,
   getDocs,
   getFirestore,
@@ -711,6 +713,29 @@ describe('Firebase multiple-team membership (#24)', () => {
     await a.teams.removeMember(t, ub.uid)
     profile = await waitFor<UserProfile | null>((cb) => b.users.subscribeProfile(ub.uid, cb), (p) => p?.teamId === other)
     expect(profile?.teamIds).toEqual([other])
+  })
+  // 表示するチームの切り替えは、サーバーの応答を待たずにプロフィールの購読へ反映する（切り替えが画面に出ない不具合の修正）
+  it('reflects the team switch in the profile listener without waiting for the server', async () => {
+    const { auth, db } = emulatorApp()
+    const r = createFirestoreRepository(auth, db)
+    await r.auth.signUp({ email: `${randomUUID()}@example.invalid`, password: 'Example123!', displayName: 'テスト' })
+    const me = auth.currentUser!.uid
+    await markEmailVerified(me)
+    await r.auth.reloadUser()
+    const first = await r.teams.create('一つ目', '名前')
+    const second = await r.teams.create('二つ目', '名前')
+    const seen: (string | null | undefined)[] = []
+    const off = r.users.subscribeProfile(me, (p) => seen.push(p?.teamId))
+    await waitFor<UserProfile | null>((cb) => r.users.subscribeProfile(me, cb), (p) => p?.teamId === second)
+    // サーバーにつながらない状態でも、切り替えは購読にすぐ届く
+    await disableNetwork(db)
+    const selecting = r.teams.select(first)
+    await expect.poll(() => seen.at(-1), { timeout: 3000 }).toBe(first)
+    await enableNetwork(db)
+    await selecting
+    off()
+    // 所属していないチームへの切り替えは、ルールが拒否する
+    await expect(r.teams.select('outsider')).rejects.toThrow()
   })
   it('deletes all nested data and codes, preserves other teams and supports resuming after interruption', async () => {
     const a = await client(), b = await client()
