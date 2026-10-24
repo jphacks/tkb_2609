@@ -1,0 +1,67 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgb(16 24 40 / 36%);
+  animation: fade 0.15s ease-out;
+}
+
+.sheet {
+  width: 100%;
+  max-width: var(--app-max-w);
+  max-height: 88dvh;
+  overflow-y: auto;
+  padding: 8px 16px calc(20px + var(--safe-bottom));
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: slide 0.22s ease-out;
+}
+
+.handle {
+  width: 40px;
+  height: 4px;
+  margin: 0 auto 12px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.title {
+  margin-bottom: 16px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+/* 幅の広い画面では、下からのシートではなく中央のダイアログにする */
+@media (min-width: 700px) {
+  .backdrop {
+    align-items: center;
+    padding: 24px;
+  }
+
+  .sheet {
+    max-width: 440px;
+    padding-bottom: 20px;
+    border-radius: var(--radius-lg);
+  }
+
+  .handle {
+    display: none;
+  }
+}
+
+@keyframes slide {
+  from {
+    transform: translateY(40px);
+    opacity: 0.6;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}

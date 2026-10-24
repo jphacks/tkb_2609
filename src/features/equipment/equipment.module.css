@@ -1,0 +1,195 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.skeleton {
+  height: 160px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+}
+
+/* ---------- 自分の状態ウィジェット ---------- */
+
+.widget {
+  padding: 16px 16px 12px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: #fff;
+  box-shadow: 0 6px 18px rgb(37 99 235 / 25%);
+}
+
+.widgetHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.widgetTitle {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.widgetCount {
+  min-width: 26px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 22%);
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center;
+}
+
+/* 用具が多くても大きくなりすぎないよう、約4件分を超えたらスクロール */
+.widgetList {
+  max-height: 212px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.widgetRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 6px 0;
+}
+
+.widgetRow + .widgetRow {
+  border-top: 1px solid rgb(255 255 255 / 22%);
+}
+
+.widgetRow :global(.muted) {
+  color: rgb(255 255 255 / 80%);
+}
+
+.widgetName {
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.widget :global(.btn-secondary) {
+  flex-shrink: 0;
+  border-color: transparent;
+  background: #fff;
+  color: var(--accent);
+}
+
+.widget :global(.btn-secondary):disabled {
+  background: rgb(255 255 255 / 55%);
+  color: var(--text-sub);
+  opacity: 1;
+}
+
+/* ---------- 用具一覧 ---------- */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-right: -10px;
+}
+
+.empty {
+  padding: 32px 0;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* スマホ縦では1列、幅に余裕があれば自動で複数列になる */
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 58px;
+  padding: 8px 4px 8px 14px;
+  border: 1.5px solid;
+  border-radius: var(--radius);
+  transition:
+    background-color 0.25s,
+    border-color 0.25s;
+}
+
+.rowFree {
+  border-color: var(--free-border);
+  background: var(--free-bg);
+}
+
+.rowHeld {
+  border-color: var(--held-border);
+  background: var(--held-bg);
+}
+
+.rowName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.holderChip {
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--held-border);
+  color: var(--held);
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.holderChipMine {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.more {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+}
+
+/* ---------- シート ---------- */
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

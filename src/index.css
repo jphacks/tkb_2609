@@ -1,0 +1,299 @@
+/* デザイントークンと、画面をまたいで使う部品（ボタン・入力欄など）。
+   画面ごとのレイアウトは各 *.module.css に書く。 */
+
+:root {
+  color-scheme: light;
+
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-sunken: #f0f2f5;
+  --border: #e4e7ec;
+  --border-strong: #cfd4dc;
+  --text: #1a1f26;
+  --text-sub: #5b6573;
+  --text-muted: #98a2b3;
+
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-weak: #eaf1ff;
+  --danger: #d92d20;
+  --danger-weak: #fef1f0;
+
+  /* 用具：誰かが持っている */
+  --held: #b54708;
+  --held-bg: #fff8eb;
+  --held-border: #f9d79b;
+  /* 用具：誰も持っていない */
+  --free-border: #d0e3d6;
+  --free-bg: #ffffff;
+
+  --att-present: #12a150;
+  --att-absent: #e5484d;
+  --att-observe: #6b7280;
+  --att-late: #e8890c;
+  --att-leave-early: #7c5cdb;
+
+  --radius-lg: 18px;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 6%);
+  --shadow-lg: 0 12px 32px rgb(16 24 40 / 16%);
+
+  --header-h: 52px;
+  --tabbar-h: 58px;
+  --app-max-w: 520px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  --rail-w: 0px;
+
+  font-family: system-ui, -apple-system, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- 画面の大きさ・向きに合わせたレイアウト ----------
+   スマホ縦（基準）     : 1列、下部タブバー
+   幅 700px 以上        : 一覧を複数列に、詳細やシートは中央に表示
+   幅 900px 以上 / スマホ横 : タブバーを左側のレールに移し、縦の高さを確保する
+   各 *.module.css でも同じ条件のメディアクエリを使う */
+
+@media (min-width: 700px) {
+  :root {
+    --app-max-w: 1120px;
+  }
+}
+
+@media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --tabbar-h: 0px;
+    --rail-w: 84px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --header-h: 44px;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+body {
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+/* ---------- ボタン ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    opacity 0.15s;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:not(:disabled):active {
+  background: var(--accent-strong);
+}
+
+.btn-secondary {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.btn-secondary:not(:disabled):active {
+  background: var(--surface-sunken);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--accent);
+}
+
+.btn-sm {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-sub);
+}
+
+.icon-btn:active {
+  background: var(--surface-sunken);
+}
+
+/* ---------- 入力欄 ---------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+}
+
+.input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  /* 16px 未満だと iOS が入力時にズームする */
+  font-size: 16px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+
+/* 日付・時刻の入力欄。iOS Safari の標準表示では、中央寄せになる・空のとき高さが潰れる・
+   枠からはみ出す、といった崩れが起きるため、ほかの入力欄と同じ見た目に揃える */
+input.input[type='date'],
+input.input[type='time'] {
+  display: block;
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 12px;
+  line-height: 24px;
+}
+
+input.input::-webkit-date-and-time-value {
+  margin: 0;
+  text-align: left;
+}
+
+textarea.input {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.error-text {
+  font-size: 14px;
+  color: var(--danger);
+}
+
+/* ---------- 共通 ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-sub);
+  letter-spacing: 0.02em;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

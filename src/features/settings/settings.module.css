@@ -1,0 +1,239 @@
+/* スマホ縦では1列、幅に余裕があれば2列 */
+.page {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
+  align-items: start;
+  gap: 22px 20px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+}
+
+.item + .item {
+  border-top: 1px solid var(--border);
+}
+
+.itemLabel {
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.itemValue {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.inlineForm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- 参加コード ---------- */
+
+.codeCard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 14px;
+}
+
+.codeRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.code {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineButton {
+  background: #06c755;
+  color: #fff;
+  text-decoration: none;
+}
+
+/* ---------- 編集権限 ---------- */
+
+.segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.segment button {
+  min-height: 40px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.segment button[aria-checked='true'] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+/* ---------- 予定の種類 ---------- */
+
+.types {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+}
+
+.typeRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.colors {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.color[aria-checked='true'] {
+  box-shadow: 0 0 0 2px var(--swatch);
+}
+
+.typeDelete {
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+}
+
+.typeActions {
+  display: flex;
+  justify-content: space-between;
+}
+
+/* ---------- メンバー ---------- */
+
+.members {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 6px 6px 14px;
+}
+
+.member + .member {
+  border-top: 1px solid var(--border);
+}
+
+.avatar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.memberName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminBadge {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.memberMore {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.accountActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.mockBox {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.mockTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-sub);
+}

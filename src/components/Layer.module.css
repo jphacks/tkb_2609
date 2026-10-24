@@ -1,0 +1,47 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.layer {
+  height: 100%;
+  overflow-y: auto;
+  margin: 0 auto;
+  background: var(--bg);
+  animation: enter 0.2s ease-out;
+}
+
+.body {
+  padding: 16px 16px calc(32px + var(--safe-bottom));
+}
+
+/* 幅の広い画面では、読みやすい幅のパネルにして中央に置く */
+@media (min-width: 700px) {
+  .backdrop {
+    background: rgb(16 24 40 / 36%);
+    animation: fade 0.15s ease-out;
+  }
+
+  .layer {
+    max-width: 680px;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .body {
+    padding: 20px 24px calc(40px + var(--safe-bottom));
+  }
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
