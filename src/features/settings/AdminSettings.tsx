@@ -10,10 +10,8 @@ import { copyText } from '../../lib/clipboard'
 
 const TYPE_COLORS = ['#2563eb', '#e8590c', '#12a150', '#7c5cdb', '#d6336c', '#0e9aa7', '#6b7280']
 
-// LINE の共有リンクは1回に1つのメッセージしか送れないため、URL と参加コードを2回に分けて送る（#42）。
-// コードだけのメッセージにすると、受け取った人が長押しでコピーしやすい
+// メンバーに共有するアプリのリンク。LINE から開いても外部ブラウザが起動するようにする（#56）
 const APP_URL = `${location.origin}/?openExternalBrowser=1`
-const lineShareUrl = (text: string) => `https://line.me/R/share?text=${encodeURIComponent(text)}`
 
 /** 管理者だけに表示する設定 */
 export function AdminSettings() {
@@ -29,28 +27,11 @@ export function AdminSettings() {
 function JoinCodeSection() {
   const repo = useRepository()
   const { team } = useSession()
-  const { run, confirm, toast } = useFeedback()
+  const { run, confirm } = useFeedback()
   const [busy, setBusy] = useState(false)
   // 設定タブを開いたら最初から表示する（#43）。読み取りは設定タブを開くたびに1件。
   // undefined は取得中、null はコードがない・読み取れなかった場合
   const code = useSubscription<string | null>((cb) => repo.teams.subscribeJoinCode(team.id, cb), [team.id])
-  const codeInput = useRef<HTMLInputElement>(null)
-  const [manualCopy, setManualCopy] = useState(false)
-
-  const urlMessage = `「${team.name}」の BUKATSU に参加してください。アプリを開き、次に送る参加コードを入力してください。\n${APP_URL}`
-
-  const copy = async () => {
-    if (!code) return
-    if (await copyText(code)) {
-      setManualCopy(false)
-      toast('参加コードをコピーしました')
-    } else {
-      setManualCopy(true)
-      codeInput.current?.focus()
-      codeInput.current?.select()
-      toast('コードを選択しました。長押し、または Ctrl/Cmd+C でコピーしてください')
-    }
-  }
 
   const regenerate = async () => {
     const ok = await confirm({
@@ -73,8 +54,10 @@ function JoinCodeSection() {
 
   return (
     <section className={styles.section}>
-      <h2 className="section-title">参加コード（管理者）</h2>
+      <h2 className="section-title">メンバーの招待（管理者）</h2>
       <div className={`card ${styles.codeCard}`}>
+        {/* アプリのリンクは、参加コードの読み込み状態に関係なく表示する（#56） */}
+        <CopyField label="アプリのリンク" value={APP_URL} variant="link" />
         {code === undefined ? (
           <p role="status">参加コードを取得中です…</p>
         ) : code === null ? (
@@ -85,30 +68,47 @@ function JoinCodeSection() {
           </>
         ) : (
           <>
-            <div className={styles.codeRow}>
-              <input ref={codeInput} className={styles.code} value={code} readOnly
-                aria-label="参加コード" onFocus={(e) => e.currentTarget.select()} />
-              <button className="icon-btn" onClick={copy} aria-label="参加コードをコピー">
-                <CopyIcon size={20} />
-              </button>
-            </div>
-            {manualCopy && <p className="hint">自動コピーが許可されていません。コードを長押しして「コピー」、または Ctrl/Cmd+C でコピーしてください。</p>}
-            <div className={styles.lineShare}>
-              <p className={styles.lineShareTitle}>LINE で共有（2回に分けて送ります）</p>
-              <a className={`btn btn-block ${styles.lineButton}`} href={lineShareUrl(urlMessage)} target="_blank" rel="noreferrer">
-                ① アプリの URL を送る
-              </a>
-              <a className={`btn btn-block ${styles.lineButton}`} href={lineShareUrl(code)} target="_blank" rel="noreferrer">
-                ② 参加コードを送る
-              </a>
-              <p className="hint">① のあと同じトークに ② を送ると、コードだけのメッセージになり、長押しでコピーしやすくなります。</p>
-            </div>
+            <CopyField label="参加コード" value={code} variant="code" />
             {regenerateButton}
           </>
         )}
         <p className="hint">コードを知っている人は誰でも参加できます。意図しない人に知られたら再発行してください。</p>
       </div>
     </section>
+  )
+}
+
+/** 読み取り専用の欄とコピーボタン。自動コピーが使えないブラウザでは、欄を選択して手動コピーを案内する */
+function CopyField({ label, value, variant }: { label: string; value: string; variant: 'code' | 'link' }) {
+  const { toast } = useFeedback()
+  const input = useRef<HTMLInputElement>(null)
+  const [manualCopy, setManualCopy] = useState(false)
+
+  const copy = async () => {
+    if (await copyText(value)) {
+      setManualCopy(false)
+      toast(`${label}をコピーしました`)
+    } else {
+      setManualCopy(true)
+      input.current?.focus()
+      input.current?.select()
+      toast(`${label}を選択しました。長押し、または Ctrl/Cmd+C でコピーしてください`)
+    }
+  }
+
+  return (
+    <div className={styles.copyField}>
+      <span className={styles.copyLabel}>{label}</span>
+      <div className={styles.codeRow}>
+        {/* 長押しで手動コピーできるよう、読み取り専用の入力欄に表示する（PR #21）。リンクは1行に収まらない部分を省略する */}
+        <input ref={input} className={variant === 'code' ? styles.code : styles.link} value={value} readOnly
+          aria-label={label} onFocus={(e) => e.currentTarget.select()} />
+        <button className="icon-btn" onClick={copy} aria-label={`${label}をコピー`}>
+          <CopyIcon size={20} />
+        </button>
+      </div>
+      {manualCopy && <p className="hint">自動コピーが許可されていません。{label}を長押しして「コピー」、または Ctrl/Cmd+C でコピーしてください。</p>}
+    </div>
   )
 }
 

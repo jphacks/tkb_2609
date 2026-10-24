@@ -183,7 +183,7 @@ describe('equipment UI', () => {
   })
 })
 describe('settings UI', () => {
-  it('shows the private code from the start, shares the URL and the code as separate LINE messages (#42 #43)', async () => {
+  it('shows the app link and the private code from the start, each with a copy button (#43 #56)', async () => {
     const h = harness(),
       codes = stream<string | null>('ABCD2345')
     h.repo.teams.subscribeJoinCode = (_teamId, cb) => codes.subscribe(cb)
@@ -197,21 +197,24 @@ describe('settings UI', () => {
     expect((screen.getByLabelText('参加コード') as HTMLInputElement).value).toBe('ABCD2345')
     codes.emit('K7MPX2QA')
     expect((screen.getByLabelText('参加コード') as HTMLInputElement).value).toBe('K7MPX2QA')
-    // LINE では URL とコードを別のメッセージで送る。コードのメッセージはコードだけ（#42）
-    const shared = (name: string) =>
-      new URL(screen.getByRole('link', { name }).getAttribute('href')!).searchParams.get('text')!
-    const urlText = shared('① アプリの URL を送る')
-    expect(urlText).toContain('openExternalBrowser=1')
-    expect(urlText).not.toContain('K7MPX2QA')
-    expect(shared('② 参加コードを送る')).toBe('K7MPX2QA')
-    // 読み取れない・コードがない場合は、取得中のままにせず再発行できるようにする
+    // 「LINE で共有」はなく、参加コードの上にアプリのリンクの欄がある（#56）
+    expect(screen.queryByRole('link', { name: /送る|LINE/ })).toBeNull()
+    const link = screen.getByLabelText('アプリのリンク') as HTMLInputElement
+    expect(link.value).toBe(`${location.origin}/?openExternalBrowser=1`)
+    expect(link.compareDocumentPosition(screen.getByLabelText('参加コード')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // 読み取れない・コードがない場合は、取得中のままにせず再発行できるようにする。リンクはそのまま表示する
     codes.emit(null)
     expect(screen.getByText(/参加コードを取得できませんでした/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'コードを再発行' })).toBeTruthy()
+    expect(screen.getByLabelText('アプリのリンク')).toBeTruthy()
     codes.emit('K7MPX2QA')
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => {}) } })
+    await user.click(screen.getByRole('button', { name: 'アプリのリンクをコピー' }))
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(`${location.origin}/?openExternalBrowser=1`)
+    expect(h.feedback.toast).toHaveBeenLastCalledWith('アプリのリンクをコピーしました')
     await user.click(screen.getByRole('button', { name: '参加コードをコピー' }))
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('K7MPX2QA')
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith('K7MPX2QA')
+    expect(h.feedback.toast).toHaveBeenLastCalledWith('参加コードをコピーしました')
     vi.mocked(h.feedback.confirm).mockResolvedValue(false)
     await user.click(screen.getByRole('button', { name: 'コードを再発行' }))
     expect(h.repo.teams.regenerateJoinCode).not.toHaveBeenCalled()
