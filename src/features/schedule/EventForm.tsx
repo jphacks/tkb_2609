@@ -9,7 +9,7 @@ import styles from './schedule.module.css'
 /** 予定の作成・編集。完了したら表示する予定の id を返す */
 export function EventForm({ event, onDone }: { event?: TeamEvent; onDone(eventId?: string): void }) {
   const repo = useRepository()
-  const { team } = useSession()
+  const { team, canEditEvents } = useSession()
   const { run } = useFeedback()
   const types = team.settings.eventTypes
 
@@ -24,18 +24,21 @@ export function EventForm({ event, onDone }: { event?: TeamEvent; onDone(eventId
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
+    if (!canEditEvents) return
     setBusy(true)
     const input = { typeId, title: title.trim(), startAt: fromDateTimeInput(date, time), place: place.trim() || null }
     let id = event?.id
-    const ok = await run(async () => {
-      if (event) {
-        await repo.events.update(team.id, event.id, input)
-      } else {
-        const newId = await repo.events.create(team.id, input)
-        id = newId
-        if (note.trim()) await repo.events.addNote(team.id, newId, note)
-      }
-    }, event ? '予定を更新しました' : '予定を追加しました')
+    const ok = await run(
+      async () => {
+        if (event) {
+          await repo.events.update(team.id, event.id, input)
+        } else {
+          const newId = await repo.events.create(team.id, input, note)
+          id = newId
+        }
+      },
+      event ? '予定を更新しました' : '予定を追加しました',
+    )
     setBusy(false)
     if (ok) onDone(id)
   }
@@ -64,7 +67,14 @@ export function EventForm({ event, onDone }: { event?: TeamEvent; onDone(eventId
 
         <label className="field">
           <span className="label">予定名</span>
-          <input className="input" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="放課後練習" />
+          <input
+            className="input"
+            required
+            maxLength={100}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="放課後練習"
+          />
         </label>
 
         <div className={styles.formRow}>
@@ -80,7 +90,13 @@ export function EventForm({ event, onDone }: { event?: TeamEvent; onDone(eventId
 
         <label className="field">
           <span className="label">場所（任意）</span>
-          <input className="input" value={place} onChange={(e) => setPlace(e.target.value)} placeholder="第2グラウンド" />
+          <input
+            className="input"
+            maxLength={200}
+            value={place}
+            onChange={(e) => setPlace(e.target.value)}
+            placeholder="第2グラウンド"
+          />
         </label>
 
         {!event && (
@@ -89,6 +105,7 @@ export function EventForm({ event, onDone }: { event?: TeamEvent; onDone(eventId
             <textarea
               className="input"
               rows={3}
+              maxLength={2000}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="持ち物や連絡事項など"
@@ -97,7 +114,10 @@ export function EventForm({ event, onDone }: { event?: TeamEvent; onDone(eventId
           </label>
         )}
 
-        <button className="btn btn-primary btn-block" disabled={busy || !title.trim() || !date || !time}>
+        <button
+          className="btn btn-primary btn-block"
+          disabled={busy || !canEditEvents || !title.trim() || !date || !time}
+        >
           {event ? '保存する' : '追加する'}
         </button>
       </form>

@@ -8,14 +8,17 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "emulators": "firebase emulators:start --project demo-bukatsu --only auth,firestore --import=.emulator-data --export-on-exit"
+    "emulators": "firebase emulators:start --project demo-bukatsu --only auth,firestore --import=.emulator-data --export-on-exit",
+    "test": "firebase emulators:exec --only auth,firestore --project demo-bukatsu \"vitest run\"",
+    "typecheck:tests": "tsc -p tsconfig.test.json"
   },
   "dependencies": {
-    "firebase": "^12.19.0",
+    "firebase": "^13.1.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -23,6 +26,10 @@
     "firebase-tools": "^15.34.1",
     "oxlint": "^1.88.0",
     "typescript": "~6.0.3",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.6"
   }
 }

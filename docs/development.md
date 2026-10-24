@@ -53,13 +53,24 @@ npm run emulators   # 別のターミナルで起動したままにする
 - CLI で本番を操作するには、Firebase コンソールの「プロジェクトの設定 → ユーザーと権限」で自分の Google アカウントをメンバーに追加してもらう
 - `.env.local` の設定値は、チャットや LINE で個別に受け取る（GitHub には上げない）
 
+### モックと Firebase の切り替え
+
+`.env.local` の `VITE_DATA_BACKEND` で接続先を選ぶ。
+
+| 値 | 接続先 |
+| --- | --- |
+| `mock`（既定） | メモリ上のダミーデータ（`src/data/mock/`） |
+| `firebase` | Firebase Auth と Firestore（`VITE_USE_EMULATOR=true` ならエミュレータ） |
+
+ルールのテスト（`npm test`）やアカウントの扱いなど、Firebase 接続の詳細は [Firebase 接続ガイド](firebase.md) を参照。
+
 ### コードからの使い方
 
 `src/data/firebase/app.ts` の `auth` と `db` を使う。エミュレータへの接続や設定値の読み込みはこのファイルで済ませてある。
 
 ### セキュリティルール
 
-`firestore.rules`。Issue #7 で本実装するまでは、すべての読み書きを拒否する。
+`firestore.rules`（Issue #7）。方針は `docs/data-model.md`、検証方法は [Firebase 接続ガイド](firebase.md) を参照。本番への反映は `--project prod` を付けて行う。
 
 ## 現在の状態：モック
 

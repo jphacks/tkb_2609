@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useRepository } from '../../app/contexts'
 import { RepositoryError } from '../../data/repository'
 import { FeedbackContext, type ConfirmOptions, type Feedback } from './context'
 import styles from './feedback.module.css'
@@ -8,6 +9,7 @@ interface PendingConfirm extends ConfirmOptions {
 }
 
 export function FeedbackProvider({ children }: { children: ReactNode }) {
+  const repository = useRepository()
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingConfirm | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -17,6 +19,8 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
     clearTimeout(timer.current)
     timer.current = setTimeout(() => setToastMessage(null), 2600)
   }, [])
+
+  useEffect(() => repository.onError?.((error) => toast(error.message)), [repository, toast])
 
   const confirm = useCallback(
     (options: ConfirmOptions) => new Promise<boolean>((resolve) => setPending({ ...options, resolve })),
