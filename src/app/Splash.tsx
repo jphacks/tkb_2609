@@ -4,7 +4,7 @@ export function Splash() {
   return (
     <div className={styles.splash} aria-busy="true">
       <img src="/favicon.svg" alt="" width={56} height={56} />
-      <span className={styles.splashName}>Bukatsu</span>
+      <span className={styles.splashName}>BUKATSU</span>
     </div>
   )
 }
