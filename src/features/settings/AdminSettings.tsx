@@ -10,6 +10,11 @@ import { copyText } from '../../lib/clipboard'
 
 const TYPE_COLORS = ['#2563eb', '#e8590c', '#12a150', '#7c5cdb', '#d6336c', '#0e9aa7', '#6b7280']
 
+// LINE の共有リンクは1回に1つのメッセージしか送れないため、URL と参加コードを2回に分けて送る（#42）。
+// コードだけのメッセージにすると、受け取った人が長押しでコピーしやすい
+const APP_URL = `${location.origin}/?openExternalBrowser=1`
+const lineShareUrl = (text: string) => `https://line.me/R/share?text=${encodeURIComponent(text)}`
+
 /** 管理者だけに表示する設定 */
 export function AdminSettings() {
   return (
@@ -26,16 +31,13 @@ function JoinCodeSection() {
   const { team } = useSession()
   const { run, confirm, toast } = useFeedback()
   const [busy, setBusy] = useState(false)
-  // 設定タブを開いたら最初から表示する（#43）。読み取りは管理者が設定タブを開いている間の1件だけ
+  // 設定タブを開いたら最初から表示する（#43）。読み取りは設定タブを開くたびに1件。
+  // undefined は取得中、null はコードがない・読み取れなかった場合
   const code = useSubscription<string | null>((cb) => repo.teams.subscribeJoinCode(team.id, cb), [team.id])
   const codeInput = useRef<HTMLInputElement>(null)
   const [manualCopy, setManualCopy] = useState(false)
 
-  // LINE の共有リンクは1回に1つのメッセージしか送れないため、URL と参加コードを2回に分けて送る（#42）。
-  // コードだけのメッセージにすると、受け取った人が長押しでコピーしやすい
-  const appUrl = `${location.origin}/?openExternalBrowser=1`
-  const urlMessage = `「${team.name}」の BUKATSU に参加してください。アプリを開き、次に送る参加コードを入力してください。\n${appUrl}`
-  const lineShareUrl = (text: string) => `https://line.me/R/share?text=${encodeURIComponent(text)}`
+  const urlMessage = `「${team.name}」の BUKATSU に参加してください。アプリを開き、次に送る参加コードを入力してください。\n${APP_URL}`
 
   const copy = async () => {
     if (!code) return
@@ -63,12 +65,24 @@ function JoinCodeSection() {
     setBusy(false)
   }
 
+  const regenerateButton = (
+    <button className={`btn btn-ghost btn-sm ${styles.danger}`} onClick={regenerate} disabled={busy}>
+      コードを再発行
+    </button>
+  )
+
   return (
     <section className={styles.section}>
       <h2 className="section-title">参加コード（管理者）</h2>
       <div className={`card ${styles.codeCard}`}>
-        {!code ? (
-          <p role="status">参加コードを取得中です。取得できない場合は再取得してください。</p>
+        {code === undefined ? (
+          <p role="status">参加コードを取得中です…</p>
+        ) : code === null ? (
+          <>
+            {/* 読み取れない・コードがない場合も、再発行で新しいコードを作れるようにする */}
+            <p role="status">参加コードを取得できませんでした。再取得するか、コードを再発行してください。</p>
+            {regenerateButton}
+          </>
         ) : (
           <>
             <div className={styles.codeRow}>
@@ -89,9 +103,7 @@ function JoinCodeSection() {
               </a>
               <p className="hint">① のあと同じトークに ② を送ると、コードだけのメッセージになり、長押しでコピーしやすくなります。</p>
             </div>
-            <button className={`btn btn-ghost btn-sm ${styles.danger}`} onClick={regenerate} disabled={busy}>
-              コードを再発行
-            </button>
+            {regenerateButton}
           </>
         )}
         <p className="hint">コードを知っている人は誰でも参加できます。意図しない人に知られたら再発行してください。</p>

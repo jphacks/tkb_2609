@@ -203,6 +203,11 @@ describe('settings UI', () => {
     expect(urlText).toContain('openExternalBrowser=1')
     expect(urlText).not.toContain('K7MPX2QA')
     expect(shared('② 参加コードを送る')).toBe('K7MPX2QA')
+    // 読み取れない・コードがない場合は、取得中のままにせず再発行できるようにする
+    codes.emit(null)
+    expect(screen.getByText(/参加コードを取得できませんでした/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'コードを再発行' })).toBeTruthy()
+    codes.emit('K7MPX2QA')
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => {}) } })
     await user.click(screen.getByRole('button', { name: '参加コードをコピー' }))
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('K7MPX2QA')
