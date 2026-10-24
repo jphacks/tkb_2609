@@ -1,11 +1,12 @@
 /* ---------- 一覧 ---------- */
 
-/* スマホ縦では1列、幅に余裕があれば自動で複数列になる */
+/* 予定は画面の大きさに関わらず1列。広い画面では読みやすい幅に収めて中央に置く */
 .list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-  align-items: start;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
+  max-width: 720px;
+  margin: 0 auto;
 }
 
 .skeleton {
@@ -310,10 +311,16 @@
   gap: 18px;
 }
 
+/* 日付と集合時間。2つ並べると窮屈な狭い画面では自動で縦に並べる */
 .formRow {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
   gap: 12px;
+}
+
+/* 日付・時刻の入力欄は最小幅を持つため、列の幅を超えないように 0 にする */
+.formRow > * {
+  min-width: 0;
 }
 
 .typeChoices {

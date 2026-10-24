@@ -97,7 +97,7 @@ export function EventForm({ event, onDone }: { event?: TeamEvent; onDone(eventId
           </label>
         )}
 
-        <button className="btn btn-primary btn-block" disabled={busy || !title.trim()}>
+        <button className="btn btn-primary btn-block" disabled={busy || !title.trim() || !date || !time}>
           {event ? '保存する' : '追加する'}
         </button>
       </form>

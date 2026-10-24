@@ -229,6 +229,23 @@ p {
   box-shadow: 0 0 0 3px var(--accent-weak);
 }
 
+/* 日付・時刻の入力欄。iOS Safari の標準表示では、中央寄せになる・空のとき高さが潰れる・
+   枠からはみ出す、といった崩れが起きるため、ほかの入力欄と同じ見た目に揃える */
+input.input[type='date'],
+input.input[type='time'] {
+  display: block;
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 12px;
+  line-height: 24px;
+}
+
+input.input::-webkit-date-and-time-value {
+  margin: 0;
+  text-align: left;
+}
+
 textarea.input {
   min-height: 88px;
   resize: vertical;
