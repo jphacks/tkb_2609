@@ -43,6 +43,53 @@
   color: var(--accent);
 }
 
+/* 幅の広い画面とスマホ横向き：タブバーを左側のレールにする */
+@media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
+  .shell {
+    display: grid;
+    grid-template-areas:
+      'nav header'
+      'nav main';
+    grid-template-columns: calc(var(--rail-w) + env(safe-area-inset-left, 0px)) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+
+  .headerArea {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    grid-area: header;
+    align-self: start;
+  }
+
+  .content {
+    grid-area: main;
+    padding: 16px max(20px, env(safe-area-inset-right, 0px)) calc(32px + var(--safe-bottom)) 20px;
+  }
+
+  .tabbar {
+    position: sticky;
+    top: 0;
+    left: auto;
+    bottom: auto;
+    grid-area: nav;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: auto;
+    max-width: none;
+    height: 100dvh;
+    padding: calc(12px + var(--safe-top)) 0 var(--safe-bottom) env(safe-area-inset-left, 0px);
+    border-top: none;
+    border-right: 1px solid var(--border);
+    transform: none;
+  }
+
+  .tab {
+    min-height: 64px;
+  }
+}
+
 .splash {
   display: flex;
   flex-direction: column;

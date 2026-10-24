@@ -2,6 +2,7 @@
 // 権限チェックは Firestore セキュリティルールで行う予定の内容（docs/data-model.md）と揃えている。
 // 別タブで変更すると storage イベントで反映されるので、リアルタイム更新の確認にも使える。
 
+import { isDuplicateEquipmentName } from '../../lib/equipment'
 import { generateJoinCode, normalizeJoinCode } from '../../lib/joinCode'
 import type {
   EquipmentItem,
@@ -33,7 +34,7 @@ export interface MockDb {
   teams: Record<string, StoredTeam>
 }
 
-const DB_KEY = 'bukatsu:mock-db:v1'
+const DB_KEY = 'bukatsu:mock-db:v2'
 const SESSION_KEY = 'bukatsu:mock-session:v1'
 /** 通信の遅延を再現する */
 const LATENCY_MS = 150
@@ -172,6 +173,28 @@ export function createMockRepository(): Repository & { reset(): void } {
     return code
   }
 
+  function adminCount(team: StoredTeam): number {
+    return Object.values(team.members).filter((m) => m.role === 'admin').length
+  }
+
+  /** チームから外す。持っていた用具は手放した状態にする */
+  function detachMember(team: StoredTeam, uid: string) {
+    for (const item of Object.values(team.equipment)) {
+      if (item.holderUid === uid) Object.assign(item, { holderUid: null, holderName: null, updatedAt: new Date() })
+    }
+    delete team.members[uid]
+    if (db.users[uid]) db.users[uid].teamId = null
+  }
+
+  function validEquipmentName(team: StoredTeam, name: string, exceptId?: string): string {
+    const trimmed = name.trim()
+    if (!trimmed) throw new RepositoryError('用具名を入力してください')
+    if (isDuplicateEquipmentName(Object.values(team.equipment), trimmed, exceptId)) {
+      throw new RepositoryError(`「${trimmed}」はすでに登録されています`)
+    }
+    return trimmed
+  }
+
   return {
     reset() {
       db = createSeed()
@@ -308,6 +331,15 @@ export function createMockRepository(): Repository & { reset(): void } {
         return watch(() => Object.values(db.teams[teamId]?.members ?? {}), cb)
       },
 
+      async rename(teamId, name) {
+        await sleep(LATENCY_MS)
+        const { team } = requireAdmin(teamId)
+        const trimmed = name.trim()
+        if (!trimmed) throw new RepositoryError('チーム名を入力してください')
+        team.name = trimmed
+        commit()
+      },
+
       async updateSettings(teamId, settings) {
         await sleep(LATENCY_MS)
         const { team } = requireAdmin(teamId)
@@ -320,11 +352,33 @@ export function createMockRepository(): Repository & { reset(): void } {
         const { team } = requireAdmin(teamId)
         const target = team.members[uid]
         if (!target) throw new RepositoryError('メンバーが見つかりません')
-        const admins = Object.values(team.members).filter((m) => m.role === 'admin')
-        if (role === 'member' && target.role === 'admin' && admins.length <= 1) {
+        if (role === 'member' && target.role === 'admin' && adminCount(team) <= 1) {
           throw new RepositoryError('管理者が0人になるため変更できません')
         }
         target.role = role
+        commit()
+      },
+
+      async leave(teamId) {
+        await sleep(LATENCY_MS)
+        const { uid, team, member } = requireMember(teamId)
+        if (member.role === 'admin' && adminCount(team) <= 1) {
+          throw new RepositoryError('最後の管理者は離れられません。他のメンバーを管理者にしてください')
+        }
+        detachMember(team, uid)
+        commit()
+      },
+
+      async removeMember(teamId, uid) {
+        await sleep(LATENCY_MS)
+        const { uid: myUid, team } = requireAdmin(teamId)
+        if (uid === myUid) throw new RepositoryError('自分を削除するときは「チームを離れる」を使ってください')
+        const target = team.members[uid]
+        if (!target) throw new RepositoryError('メンバーが見つかりません')
+        if (target.role === 'admin' && adminCount(team) <= 1) {
+          throw new RepositoryError('管理者が0人になるため削除できません')
+        }
+        detachMember(team, uid)
         commit()
       },
 
@@ -431,8 +485,9 @@ export function createMockRepository(): Repository & { reset(): void } {
       async add(teamId, input) {
         await sleep(LATENCY_MS)
         const { team } = requireMember(teamId)
+        const name = validEquipmentName(team, input.name)
         const id = newId()
-        team.equipment[id] = { id, ...input, holderUid: null, holderName: null, updatedAt: new Date() }
+        team.equipment[id] = { id, name, holderUid: null, holderName: null, updatedAt: new Date() }
         commit()
         return id
       },
@@ -440,7 +495,8 @@ export function createMockRepository(): Repository & { reset(): void } {
       async update(teamId, itemId, input) {
         await sleep(LATENCY_MS)
         const { team } = requireMember(teamId)
-        Object.assign(requireItem(team, itemId), input, { updatedAt: new Date() })
+        const item = requireItem(team, itemId)
+        Object.assign(item, { name: validEquipmentName(team, input.name, itemId), updatedAt: new Date() })
         commit()
       },
 

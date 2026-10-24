@@ -21,7 +21,9 @@ export function MainShell() {
 
   return (
     <div className={styles.shell}>
-      <PageHeader title={team.name} />
+      <div className={styles.headerArea}>
+        <PageHeader title={team.name} />
+      </div>
 
       <main className={styles.content}>
         {tab === 'schedule' && <ScheduleTab />}

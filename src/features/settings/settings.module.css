@@ -1,7 +1,9 @@
+/* スマホ縦では1列、幅に余裕があれば2列 */
 .page {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
+  align-items: start;
+  gap: 22px 20px;
 }
 
 .section {
@@ -196,6 +198,24 @@
   color: var(--accent);
   font-size: 12px;
   font-weight: 700;
+}
+
+.memberMore {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.accountActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .danger {

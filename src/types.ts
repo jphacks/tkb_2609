@@ -63,15 +63,14 @@ export interface EventNote {
 export interface EquipmentItem {
   id: string
   name: string
-  reading: string | null
   holderUid: string | null
   holderName: string | null
   updatedAt: Date
 }
 
 export interface EquipmentInput {
+  /** チーム内で重複不可（全角・半角、大文字・小文字、前後の空白は区別しない） */
   name: string
-  reading: string | null
 }
 
 export interface AuthUser {

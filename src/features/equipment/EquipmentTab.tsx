@@ -54,8 +54,8 @@ export function EquipmentTab() {
         )}
       </section>
 
-      {panel?.kind === 'add' && <EquipmentForm onClose={() => setPanel(null)} />}
-      {panel?.kind === 'edit' && <EquipmentForm item={panel.item} onClose={() => setPanel(null)} />}
+      {panel?.kind === 'add' && <EquipmentForm items={items} onClose={() => setPanel(null)} />}
+      {panel?.kind === 'edit' && <EquipmentForm item={panel.item} items={items} onClose={() => setPanel(null)} />}
       {panel?.kind === 'menu' && (
         <EquipmentMenu
           item={panel.item}

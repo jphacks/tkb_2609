@@ -10,10 +10,21 @@ export function SettingsTab() {
   const repo = useRepository()
   const { team, user, me, members, isAdmin } = useSession()
   const { run, confirm } = useFeedback()
+  const isLastAdmin = isAdmin && members.filter((m) => m.role === 'admin').length <= 1
 
   const signOut = async () => {
     const ok = await confirm({ title: 'ログアウトしますか？', confirmLabel: 'ログアウト' })
     if (ok) await run(() => repo.auth.signOut())
+  }
+
+  const leave = async () => {
+    const ok = await confirm({
+      title: `「${team.name}」を離れますか？`,
+      message: '持っている用具は手放した状態になります。もう一度参加するには参加コードが必要です。',
+      confirmLabel: '離れる',
+      danger: true,
+    })
+    if (ok) await run(() => repo.teams.leave(team.id), 'チームを離れました')
   }
 
   const resetMock = async () => {
@@ -31,7 +42,12 @@ export function SettingsTab() {
       <section className={styles.section}>
         <h2 className="section-title">あなた</h2>
         <div className={`card ${styles.group}`}>
-          <DisplayNameForm />
+          <NameForm
+            id="display-name"
+            label="名前"
+            initial={me.displayName}
+            onSave={(name) => run(() => repo.users.updateDisplayName(name), '名前を変更しました')}
+          />
           <div className={styles.item}>
             <span className={styles.itemLabel}>メールアドレス</span>
             <span className={styles.itemValue}>{user.email}</span>
@@ -46,10 +62,20 @@ export function SettingsTab() {
       <section className={styles.section}>
         <h2 className="section-title">チーム</h2>
         <div className={`card ${styles.group}`}>
-          <div className={styles.item}>
-            <span className={styles.itemLabel}>チーム名</span>
-            <span className={styles.itemValue}>{team.name}</span>
-          </div>
+          {isAdmin ? (
+            <NameForm
+              key={team.name}
+              id="team-name"
+              label="チーム名（管理者が変更できます）"
+              initial={team.name}
+              onSave={(name) => run(() => repo.teams.rename(team.id, name), 'チーム名を変更しました')}
+            />
+          ) : (
+            <div className={styles.item}>
+              <span className={styles.itemLabel}>チーム名</span>
+              <span className={styles.itemValue}>{team.name}</span>
+            </div>
+          )}
           <div className={styles.item}>
             <span className={styles.itemLabel}>メンバー</span>
             <span className={styles.itemValue}>{members.length}人</span>
@@ -67,9 +93,20 @@ export function SettingsTab() {
 
       <MemberList />
 
-      <button className="btn btn-secondary btn-block" onClick={signOut}>
-        ログアウト
-      </button>
+      <section className={styles.section}>
+        <h2 className="section-title">アカウント</h2>
+        <div className={styles.accountActions}>
+          <button className="btn btn-secondary btn-block" onClick={signOut}>
+            ログアウト
+          </button>
+          <button className={`btn btn-secondary btn-block ${styles.danger}`} disabled={isLastAdmin} onClick={leave}>
+            チームを離れる
+          </button>
+          {isLastAdmin && (
+            <p className="hint">あなたは最後の管理者のため、チームを離れられません。他のメンバーを管理者にしてください。</p>
+          )}
+        </div>
+      </section>
 
       {isMock && (
         <section className={styles.mockBox}>
@@ -86,28 +123,36 @@ export function SettingsTab() {
   )
 }
 
-function DisplayNameForm() {
-  const repo = useRepository()
-  const { me } = useSession()
-  const { run } = useFeedback()
-  const [name, setName] = useState(me.displayName)
+/** 名前を1つ編集する行。変更があるときだけ保存ボタンを出す */
+function NameForm({
+  id,
+  label,
+  initial,
+  onSave,
+}: {
+  id: string
+  label: string
+  initial: string
+  onSave(name: string): Promise<unknown>
+}) {
+  const [name, setName] = useState(initial)
   const [busy, setBusy] = useState(false)
-  const changed = name.trim() !== '' && name.trim() !== me.displayName
+  const changed = name.trim() !== '' && name.trim() !== initial
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setBusy(true)
-    await run(() => repo.users.updateDisplayName(name), '名前を変更しました')
+    await onSave(name)
     setBusy(false)
   }
 
   return (
     <form className={styles.item} onSubmit={submit}>
-      <label className={styles.itemLabel} htmlFor="display-name">
-        名前
+      <label className={styles.itemLabel} htmlFor={id}>
+        {label}
       </label>
       <div className={styles.inlineForm}>
-        <input id="display-name" className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        <input id={id} className="input" value={name} onChange={(e) => setName(e.target.value)} />
         {changed && (
           <button className="btn btn-primary btn-sm" disabled={busy}>
             保存

@@ -18,6 +18,8 @@ export function EventForm({ event, onDone }: { event?: TeamEvent; onDone(eventId
   const [date, setDate] = useState(() => toDateInput(event?.startAt ?? new Date()))
   const [time, setTime] = useState(event ? toTimeInput(event.startAt) : '16:00')
   const [place, setPlace] = useState(event?.place ?? '')
+  // 追加時のみ。予定の詳細のメモ欄に、最初の書き込みとして入る
+  const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
 
   const submit = async (e: FormEvent) => {
@@ -26,8 +28,13 @@ export function EventForm({ event, onDone }: { event?: TeamEvent; onDone(eventId
     const input = { typeId, title: title.trim(), startAt: fromDateTimeInput(date, time), place: place.trim() || null }
     let id = event?.id
     const ok = await run(async () => {
-      if (event) await repo.events.update(team.id, event.id, input)
-      else id = await repo.events.create(team.id, input)
+      if (event) {
+        await repo.events.update(team.id, event.id, input)
+      } else {
+        const newId = await repo.events.create(team.id, input)
+        id = newId
+        if (note.trim()) await repo.events.addNote(team.id, newId, note)
+      }
     }, event ? '予定を更新しました' : '予定を追加しました')
     setBusy(false)
     if (ok) onDone(id)
@@ -75,6 +82,20 @@ export function EventForm({ event, onDone }: { event?: TeamEvent; onDone(eventId
           <span className="label">場所（任意）</span>
           <input className="input" value={place} onChange={(e) => setPlace(e.target.value)} placeholder="第2グラウンド" />
         </label>
+
+        {!event && (
+          <label className="field">
+            <span className="label">メモ（任意）</span>
+            <textarea
+              className="input"
+              rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="持ち物や連絡事項など"
+            />
+            <span className="hint">予定の詳細のメモ欄に、あなたの書き込みとして追加されます</span>
+          </label>
+        )}
 
         <button className="btn btn-primary btn-block" disabled={busy || !title.trim()}>
           {event ? '保存する' : '追加する'}

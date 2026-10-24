@@ -1,8 +1,10 @@
 /* ---------- 一覧 ---------- */
 
+/* スマホ縦では1列、幅に余裕があれば自動で複数列になる */
 .list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  align-items: start;
   gap: 12px;
 }
 

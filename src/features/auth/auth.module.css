@@ -9,6 +9,17 @@
   background: var(--surface);
 }
 
+/* 幅の広い画面では、中央のカードとして表示する */
+@media (min-width: 700px) {
+  .screen {
+    min-height: auto;
+    margin: 48px auto;
+    padding: 40px 32px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+  }
+}
+
 .brand {
   display: flex;
   flex-direction: column;

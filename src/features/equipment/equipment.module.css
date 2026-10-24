@@ -110,9 +110,10 @@
   text-align: center;
 }
 
+/* スマホ縦では1列、幅に余裕があれば自動で複数列になる */
 .list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 8px;
 }
 
@@ -120,7 +121,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 64px;
+  min-height: 58px;
   padding: 8px 4px 8px 14px;
   border: 1.5px solid;
   border-radius: var(--radius);
@@ -139,31 +140,14 @@
   background: var(--held-bg);
 }
 
-.rowText {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-}
-
 .rowName {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   font-size: 16px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.rowSub {
-  overflow: hidden;
-  font-size: 13px;
-  color: var(--text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rowHeld .rowSub {
-  color: var(--held);
 }
 
 .holderChip {

@@ -40,8 +40,16 @@ export interface Repository {
     join(code: string): Promise<string>
     subscribe(teamId: string, cb: (team: Team | null) => void): Unsubscribe
     subscribeMembers(teamId: string, cb: (members: Member[]) => void): Unsubscribe
+    /** 管理者のみ */
+    rename(teamId: string, name: string): Promise<void>
+    /** 管理者のみ */
     updateSettings(teamId: string, settings: Partial<TeamSettings>): Promise<void>
+    /** 管理者のみ。管理者が0人になる変更はできない */
     setRole(teamId: string, uid: string, role: Role): Promise<void>
+    /** 自分がチームを離れる。持っている用具は手放した状態になる。最後の管理者は離れられない */
+    leave(teamId: string): Promise<void>
+    /** 管理者のみ。メンバーの登録を削除する（引退・退部など）。持っている用具は手放した状態になる */
+    removeMember(teamId: string, uid: string): Promise<void>
     /** 管理者のみ */
     getJoinCode(teamId: string): Promise<string>
     /** 管理者のみ。古いコードは無効になる */
@@ -62,7 +70,9 @@ export interface Repository {
   }
   equipment: {
     subscribe(teamId: string, cb: (items: EquipmentItem[]) => void): Unsubscribe
+    /** 同じ名前の用具がすでにあれば失敗する */
     add(teamId: string, input: EquipmentInput): Promise<string>
+    /** 同じ名前の用具がすでにあれば失敗する */
     update(teamId: string, itemId: string, input: EquipmentInput): Promise<void>
     remove(teamId: string, itemId: string): Promise<void>
     /** 誰も持っていないときのみ。同時に押された場合は先の1人だけが成功する */

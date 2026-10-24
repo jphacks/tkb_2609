@@ -45,6 +45,8 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
+  --rail-w: 0px;
+
   font-family: system-ui, -apple-system, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
   font-size: 16px;
   line-height: 1.5;
@@ -52,6 +54,31 @@
   background: var(--bg);
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- 画面の大きさ・向きに合わせたレイアウト ----------
+   スマホ縦（基準）     : 1列、下部タブバー
+   幅 700px 以上        : 一覧を複数列に、詳細やシートは中央に表示
+   幅 900px 以上 / スマホ横 : タブバーを左側のレールに移し、縦の高さを確保する
+   各 *.module.css でも同じ条件のメディアクエリを使う */
+
+@media (min-width: 700px) {
+  :root {
+    --app-max-w: 1120px;
+  }
+}
+
+@media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --tabbar-h: 0px;
+    --rail-w: 84px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --header-h: 44px;
+  }
 }
 
 *,

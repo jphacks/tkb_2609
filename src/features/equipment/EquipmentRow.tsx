@@ -21,12 +21,7 @@ export function EquipmentRow({ item, onMenu }: { item: EquipmentItem; onMenu(): 
 
   return (
     <div data-flip-id={item.id} className={`${styles.row} ${held ? styles.rowHeld : styles.rowFree}`}>
-      <div className={styles.rowText}>
-        <span className={styles.rowName}>{item.name}</span>
-        <span className={styles.rowSub}>
-          {held ? `持っている人：${isMine ? 'あなた' : item.holderName}` : '誰も持っていません'}
-        </span>
-      </div>
+      <span className={styles.rowName}>{item.name}</span>
 
       {held ? (
         <span className={`${styles.holderChip} ${isMine ? styles.holderChipMine : ''}`}>

@@ -56,9 +56,9 @@ function event(
   return { ...e, notes: {} }
 }
 
-function item(id: string, name: string, reading: string | null, holder?: string): EquipmentItem {
+function item(id: string, name: string, holder?: string): EquipmentItem {
   const holderName = holder ? (MEMBERS.find(([uid]) => uid === holder)?.[1] ?? null) : null
-  return { id, name, reading, holderUid: holder ?? null, holderName, updatedAt: at(-1, 18) }
+  return { id, name, holderUid: holder ?? null, holderName, updatedAt: at(-1, 18) }
 }
 
 export function createSeed(): MockDb {
@@ -96,16 +96,16 @@ export function createSeed(): MockDb {
   }
 
   const equipment = [
-    item('eq-1', 'ボール袋', 'ぼーるぶくろ', 'u-member'),
-    item('eq-2', 'ビブス', null, 'u-member'),
-    item('eq-3', 'コーン', null),
-    item('eq-4', '救急箱', 'きゅうきゅうばこ', 'u-03'),
-    item('eq-5', 'ストップウォッチ', null),
-    item('eq-6', '空気入れ', 'くうきいれ', 'u-04'),
-    item('eq-7', 'ホイッスル', null),
-    item('eq-8', '作戦ボード', 'さくせんぼーど'),
-    item('eq-9', '給水ジャグ', 'きゅうすいじゃぐ', 'u-admin'),
-    item('eq-10', 'マーカー', null),
+    item('eq-1', 'ボール袋', 'u-member'),
+    item('eq-2', 'ビブス', 'u-member'),
+    item('eq-3', 'コーン'),
+    item('eq-4', '救急箱', 'u-03'),
+    item('eq-5', 'ストップウォッチ'),
+    item('eq-6', '空気入れ', 'u-04'),
+    item('eq-7', 'ホイッスル'),
+    item('eq-8', '作戦ボード'),
+    item('eq-9', '給水ジャグ', 'u-admin'),
+    item('eq-10', 'マーカー'),
   ]
 
   return {

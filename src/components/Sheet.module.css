@@ -35,6 +35,24 @@
   font-weight: 700;
 }
 
+/* 幅の広い画面では、下からのシートではなく中央のダイアログにする */
+@media (min-width: 700px) {
+  .backdrop {
+    align-items: center;
+    padding: 24px;
+  }
+
+  .sheet {
+    max-width: 440px;
+    padding-bottom: 20px;
+    border-radius: var(--radius-lg);
+  }
+
+  .handle {
+    display: none;
+  }
+}
+
 @keyframes slide {
   from {
     transform: translateY(40px);
