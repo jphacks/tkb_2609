@@ -517,3 +517,74 @@ describe('password visibility toggle (#33)', () => {
     expect(screen.getByRole('button', { name: 'パスワードを表示' })).toBeTruthy()
   })
 })
+
+// #59：チームの切り替えはヘッダーのチーム名の位置で行い、追加は設定タブから行う
+describe('team switching in the header (#59)', () => {
+  it('shows only the name with one team, a selector with two, and opens team entry from the settings tab', async () => {
+    const h = harness()
+    const user = userEvent.setup()
+    await h.repo.auth.signIn('admin@example.com', 'Bukatsu#2026')
+    render(<App />, { wrapper: h.wrapper })
+    const header = await screen.findByRole('banner')
+    expect(await within(header).findByRole('heading', { name: 'サンプルチーム' })).toBeTruthy()
+    // 上の段（「表示するチーム」の見出しと「チームを追加」）はない
+    expect(screen.queryByText('表示するチーム')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'チームを追加' })).toBeNull()
+    expect(within(header).queryByRole('combobox')).toBeNull()
+    expect(within(header).getByRole('button', { name: '最新の情報に更新' })).toBeTruthy()
+
+    // 2チーム目に参加すると、チーム名の位置が選択欄になる（チームが変わるとヘッダーは作り直される）
+    await act(() => h.repo.teams.create('第二チーム', '山田'))
+    const currentSelect = () => within(screen.getByRole('banner')).getByRole('combobox', { name: '表示するチーム' }) as HTMLSelectElement
+    await waitFor(() => expect(currentSelect().selectedOptions[0].text).toBe('第二チーム'))
+    expect([...currentSelect().options].map((o) => o.text)).toEqual(expect.arrayContaining(['サンプルチーム', '第二チーム']))
+    expect(screen.queryByText('表示するチーム')).toBeNull()
+    await user.selectOptions(currentSelect(), 'サンプルチーム')
+    await waitFor(() =>
+      expect((within(screen.getByRole('banner')).getByRole('combobox') as HTMLSelectElement).selectedOptions[0].text).toBe('サンプルチーム'),
+    )
+    // 再取得ボタンは選択欄と同じ段の右端に残る
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: '最新の情報に更新' })).toBeTruthy()
+
+    // チームの追加は設定タブから。2チーム以上なら、切り替えの案内も出す
+    await user.click(screen.getByRole('button', { name: '設定' }))
+    await user.click(await screen.findByRole('button', { name: 'チームを追加' }))
+    expect(await screen.findByRole('heading', { name: /さん、ようこそ/ })).toBeTruthy()
+    // 「戻る」で、開いていた設定タブに戻る
+    await user.click(screen.getByRole('button', { name: '戻る' }))
+    expect((await screen.findByRole('button', { name: '設定' })).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByText(/画面上部のチーム名から切り替えられます/)).toBeTruthy()
+  })
+  it('does not offer switching in settings or the header when the list lacks the current team', async () => {
+    const h = harness()
+    await h.repo.auth.signIn('admin@example.com', 'Bukatsu#2026')
+    // 参加・作成の直後で、所属の一覧の読み込みが表示中のチームに追いついていない状態
+    vi.spyOn(h.repo.teams, 'subscribeMine').mockImplementation((cb) => {
+      cb([
+        { id: 'other-1', name: '別チーム1' },
+        { id: 'other-2', name: '別チーム2' },
+      ] as never)
+      return () => {}
+    })
+    render(<App />, { wrapper: h.wrapper })
+    const header = await screen.findByRole('banner')
+    expect(await within(header).findByRole('heading', { name: 'サンプルチーム' })).toBeTruthy()
+    expect(within(header).queryByRole('combobox')).toBeNull()
+  })
+  it('lets users switch or add teams from the screen shown when the team cannot be loaded', async () => {
+    const h = harness()
+    const user = userEvent.setup()
+    await h.repo.auth.signIn('admin@example.com', 'Bukatsu#2026')
+    await h.repo.teams.create('第二チーム', '山田')
+    const realMembers = h.repo.teams.subscribeMembers.bind(h.repo.teams)
+    // 表示中のチームのメンバーを読み込めない（自分が含まれない）と、読み込めない画面になる
+    vi.spyOn(h.repo.teams, 'subscribeMembers').mockImplementation((teamId, cb) =>
+      teamId === 'team-sample' ? realMembers(teamId, cb) : (cb([]), () => {}),
+    )
+    render(<App />, { wrapper: h.wrapper })
+    expect(await screen.findByRole('heading', { name: 'データを読み込めませんでした' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'チームを追加' })).toBeTruthy()
+    await user.selectOptions(screen.getByRole('combobox', { name: '表示するチーム' }), 'サンプルチーム')
+    expect(await within(await screen.findByRole('banner')).findByRole('combobox', { name: '表示するチーム' })).toBeTruthy()
+  })
+})

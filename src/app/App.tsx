@@ -4,11 +4,12 @@ import { SignUpScreen } from '../features/auth/SignUpScreen'
 import { TeamEntryScreen } from '../features/auth/TeamEntryScreen'
 import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen'
 import type { AuthUser, Member, Team, UserProfile } from '../types'
-import { SessionContext, useRefresh, useRepository, type Session } from './contexts'
-import { MainShell } from './MainShell'
+import { canSwitchTeam, SessionContext, TeamNavigationContext, useRefresh, useRepository, useTeamNavigation, type Session, type TeamNavigation } from './contexts'
+import { MainShell, type TabId } from './MainShell'
 import { useFeedback } from '../components/feedback/context'
-import styles from './app.module.css'
 import { Splash } from './Splash'
+import styles from './app.module.css'
+import { TeamSelect } from './TeamSelect'
 import { useSubscription } from './useSubscription'
 
 /** ログイン状態 → チーム所属 → メイン画面の順に振り分ける */
@@ -38,27 +39,41 @@ function SignedIn({ user }: { user: AuthUser }) {
 
   const teams = useSubscription<Team[]>((cb) => repo.teams.subscribeMine(cb), [user.uid])
   const [adding, setAdding] = useState(false)
+  // 表示中のタブ。チームを切り替えても、設定タブの「チームを追加」から戻っても、同じタブを開く（#59）
+  const [tab, setTab] = useState<TabId>('schedule')
   const { run } = useFeedback()
+  // チームの切り替えは画面上部のヘッダー、追加は設定タブから行う（#59）
+  const navigation = useMemo<TeamNavigation | null>(
+    () =>
+      repo.supports?.multipleTeams && teams
+        ? { teams, select: (teamId) => void run(() => repo.teams.select(teamId)), add: () => setAdding(true) }
+        : null,
+    [repo, teams, run],
+  )
   if (profile === undefined || teams === undefined) return <Splash />
   if (profile === null) return <ConnectionIssue />
   // 2回目以降のログインでは teamId がわかるので、参加コードの入力は不要
   if (!profile.teamId || adding) return <TeamEntryScreen profile={profile} onDone={profile.teamId ? () => setAdding(false) : undefined} />
-  // 対応するリポジトリでチームの切り替え・追加を表示する
-  return <>
-    {repo.supports?.multipleTeams && <div className={styles.teamSwitcher}>
-      <label className="field">
-        <span className="label">表示するチーム</span>
-        <select className="input" value={profile.teamId} onChange={(e) => run(() => repo.teams.select(e.target.value))}>
-          {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-        </select>
-      </label>
-      <button className="btn btn-secondary" onClick={() => setAdding(true)}>チームを追加</button>
-    </div>}
-    <TeamSession key={profile.teamId} user={user} profile={profile} teamId={profile.teamId} />
-  </>
+  return (
+    <TeamNavigationContext.Provider value={navigation}>
+      <TeamSession key={profile.teamId} user={user} profile={profile} teamId={profile.teamId} tab={tab} onTabChange={setTab} />
+    </TeamNavigationContext.Provider>
+  )
 }
 
-function TeamSession({ user, profile, teamId }: { user: AuthUser; profile: UserProfile; teamId: string }) {
+function TeamSession({
+  user,
+  profile,
+  teamId,
+  tab,
+  onTabChange,
+}: {
+  user: AuthUser
+  profile: UserProfile
+  teamId: string
+  tab: TabId
+  onTabChange(tab: TabId): void
+}) {
   const repo = useRepository()
   const team = useSubscription<Team | null>((cb) => repo.teams.subscribe(teamId, cb), [teamId])
   const members = useSubscription<Member[]>((cb) => repo.teams.subscribeMembers(teamId, cb), [teamId])
@@ -81,15 +96,15 @@ function TeamSession({ user, profile, teamId }: { user: AuthUser; profile: UserP
   if (team === undefined || members === undefined) return <Splash />
   // 削除中の画面は削除を始めた管理者だけに出す。ほかのメンバーは、削除が完了して所属が外れるまで通常どおり使える
   if (team?.deleting && team.deletionUid === user.uid) return <TeamDeletion teamId={teamId} />
-  if (!session) return <ConnectionIssue />
+  if (!session) return <ConnectionIssue teamId={teamId} />
   return (
     <SessionContext.Provider value={session}>
-      <MainShell />
+      <MainShell tab={tab} onTabChange={onTabChange} />
     </SessionContext.Provider>
   )
 }
 
-function ConnectionIssue() {
+function ConnectionIssue({ teamId }: { teamId?: string }) {
   const repo = useRepository()
   const { refresh } = useRefresh()
   return (
@@ -107,6 +122,7 @@ function ConnectionIssue() {
       >
         ログアウト
       </button>
+      {teamId && <OtherTeams teamId={teamId} />}
     </main>
   )
 }
@@ -127,6 +143,29 @@ function TeamDeletion({ teamId }: { teamId: string }) {
         setBusy(false)
       }}>削除を再開</button>
       <button className="btn btn-secondary" onClick={() => run(() => repo.auth.signOut())}>ログアウト</button>
+      <OtherTeams teamId={teamId} />
     </main>
+  )
+}
+
+/**
+ * 読み込めない画面・削除中の画面からも、ほかのチームへ切り替え・追加できるようにする。
+ * 通常の画面のヘッダーと設定タブはここでは表示されないため（#59）
+ */
+function OtherTeams({ teamId }: { teamId: string }) {
+  const navigation = useTeamNavigation()
+  if (!navigation) return null
+  return (
+    <div className={styles.teamRecovery}>
+      {canSwitchTeam(navigation, teamId) && (
+        <label className="field">
+          <span className="label">ほかのチームを表示</span>
+          <TeamSelect teamId={teamId} teamName="" variant="field" />
+        </label>
+      )}
+      <button className="btn btn-secondary" onClick={navigation.add}>
+        チームを追加
+      </button>
+    </div>
   )
 }

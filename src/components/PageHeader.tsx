@@ -6,8 +6,19 @@ import styles from './PageHeader.module.css'
 /**
  * 画面上部のヘッダー。右端に必ず再取得ボタンを置く
  * （iPhone のショートカットから開くとブラウザのリロードが押せないため）。
+ * titleControl を渡すと、タイトルの位置にその部品（チームの選択欄など）を置き、見出しは読み上げ用だけにする
  */
-export function PageHeader({ title, onBack, actions }: { title: string; onBack?(): void; actions?: ReactNode }) {
+export function PageHeader({
+  title,
+  titleControl,
+  onBack,
+  actions,
+}: {
+  title: string
+  titleControl?: ReactNode
+  onBack?(): void
+  actions?: ReactNode
+}) {
   const { refresh, refreshing } = useRefresh()
 
   return (
@@ -17,7 +28,8 @@ export function PageHeader({ title, onBack, actions }: { title: string; onBack?(
           <BackIcon />
         </button>
       )}
-      <h1 className={styles.title}>{title}</h1>
+      <h1 className={titleControl ? 'visually-hidden' : styles.title}>{title}</h1>
+      {titleControl}
       {actions}
       <button
         className={`icon-btn ${refreshing ? styles.spinning : ''}`}
