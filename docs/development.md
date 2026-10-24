@@ -11,6 +11,56 @@ npm run lint     # oxlint
 
 スマホ実機で確認するときは `npm run dev -- --host` で起動し、同じ Wi-Fi から PC の IP アドレスにアクセスする。
 
+## Firebase
+
+### 初回だけ
+
+```sh
+cp .env.example .env.local   # .env.local はコミットしない
+```
+
+- 開発中は `.env.local` の `VITE_USE_EMULATOR=true` のままにする。ローカルのエミュレータに接続し、本番のデータには一切触れない
+- エミュレータには Java 11 以上が必要（`java -version` で確認）
+- 本番の Firebase につなぐときだけ、`.env.local` に Firebase コンソールの設定値を入れて `VITE_USE_EMULATOR=false` にする
+
+### エミュレータ（Auth・Firestore）
+
+```sh
+npm run emulators   # 別のターミナルで起動したままにする
+```
+
+| 用途 | URL |
+| --- | --- |
+| 管理画面（ユーザーやデータの確認・削除） | http://127.0.0.1:4000 |
+| Authentication | 127.0.0.1:9099 |
+| Firestore | 127.0.0.1:8080 |
+
+- プロジェクト ID は `demo-bukatsu`。`demo-` で始まる ID は本番の Firebase につながらない
+- 終了時（`Ctrl+C`）にデータを `.emulator-data/` に保存し、次回の起動時に読み込む。消したいときはこのフォルダを削除する
+- 同じ Wi-Fi のスマホからも接続できるよう、エミュレータは `0.0.0.0` で待ち受ける。アプリは開いたホスト名（PC の IP アドレス）のエミュレータにつなぐ
+- 初回起動時に Firestore エミュレータ（約 140MB）をダウンロードする。回線が不安定で失敗したら、もう一度起動する
+
+### 本番の Firebase プロジェクト
+
+| 項目 | 値 |
+| --- | --- |
+| プロジェクト ID | `bukatsu20261024`（`.firebaserc` の別名 `prod`） |
+| オーナー | `oniwasobi@gmail.com` |
+| プラン | Spark（無料）。Blaze にはアップグレードしない |
+| 有効な機能 | Authentication（メール／パスワード）、Firestore（本番環境モード） |
+
+- `.firebaserc` の `default` はエミュレータ用の `demo-bukatsu`。本番を操作するコマンドには必ず `--project prod` を付ける（付け忘れても本番には触れない）
+- CLI で本番を操作するには、Firebase コンソールの「プロジェクトの設定 → ユーザーと権限」で自分の Google アカウントをメンバーに追加してもらう
+- `.env.local` の設定値は、チャットや LINE で個別に受け取る（GitHub には上げない）
+
+### コードからの使い方
+
+`src/data/firebase/app.ts` の `auth` と `db` を使う。エミュレータへの接続や設定値の読み込みはこのファイルで済ませてある。
+
+### セキュリティルール
+
+`firestore.rules`。Issue #7 で本実装するまでは、すべての読み書きを拒否する。
+
 ## 現在の状態：モック
 
 データは `src/data/mock/` のメモリ上の実装で動いている（Firebase には未接続）。
@@ -34,6 +84,7 @@ src/
   types.ts              … ドメインの型（docs/data-model.md と対応）
   data/
     repository.ts       … データ読み書きのインターフェース
+    firebase/app.ts     … Firebase の初期化（auth・db を提供、エミュレータ接続）
     mock/               … モック実装と初期データ
     index.ts            … 使う実装の切り替え（Firestore 版はここで差し替える）
   app/                  … 起動・ログイン振り分け・タブ・共通の Context
