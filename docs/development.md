@@ -74,6 +74,10 @@ npm run emulators   # 別のターミナルで起動したままにする
 エミュレータでは、本物の Google の画面の代わりにエミュレータのアカウント選択画面が開く。「Add new account」→「Auto-generate user information」→「Sign in with Google.com」で、架空の Google アカウントとしてログインできる。
 本番で使うには、Firebase コンソールの「Authentication → ログイン方法」で Google を有効にしておく（#31）。
 
+本番（Firebase Hosting）では、開いているサイトのドメイン（`bukatsu20261024.web.app`）でログイン処理を行い、Google のログイン画面にもそのアドレスが表示される（`src/data/firebase/app.ts`）。
+このため Google Cloud コンソールの「API とサービス → 認証情報」で、Web クライアントの「承認済みのリダイレクト URI」に `https://bukatsu20261024.web.app/__/auth/handler` を登録している。
+localhost から本番に接続するときは `.env.local` の `VITE_FIREBASE_AUTH_DOMAIN`（`firebaseapp.com`）を使う。
+
 ### コードからの使い方
 
 `src/data/firebase/app.ts` の `auth` と `db` を使う。エミュレータへの接続や設定値の読み込みはこのファイルで済ませてある。
