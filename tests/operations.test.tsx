@@ -21,7 +21,7 @@ afterEach(() => {
 const baseSession = (): Session => {
   const me = { uid: 'admin', displayName: '管理者', role: 'admin' as const, joinedAt: new Date() }
   return {
-    user: { uid: 'admin', email: 'admin@example.invalid' },
+    user: { uid: 'admin', email: 'admin@example.invalid', emailVerified: true },
     profile: { uid: 'admin', displayName: '管理者', teamIds: ['team'], teamId: 'team' },
     team: {
       id: 'team',
@@ -273,6 +273,42 @@ describe('settings UI', () => {
     await user.click(screen.getByRole('button', { name: 'ログアウト' }))
     await waitFor(() => expect(h.repo.auth.signOut).toHaveBeenCalledTimes(1))
   })
+  // #41：保存時に前後の空白を取り除くため、自分の保存を「別の管理者の変更」と誤判定していた
+  it('does not report own saves as remote changes (trailing spaces, key order)', async () => {
+    const h = harness(),
+      user = userEvent.setup()
+    h.repo.teams.updateSettings = vi.fn(async () => {})
+    h.repo.users.updateDisplayName = vi.fn(async () => {})
+    const view = render(<SettingsTab />, { wrapper: h.wrapper })
+    const source = h.session().team.settings.eventTypes[0]
+    const typeInput = screen.getByRole('textbox', { name: '種類の名前' })
+    await user.clear(typeInput)
+    await user.type(typeInput, '朝練 ')
+    await user.click(within(typeInput.closest('section')!).getByRole('button', { name: '保存' }))
+    expect(h.repo.teams.updateSettings).toHaveBeenCalledWith('team', {
+      eventTypes: [{ ...source, label: '朝練' }],
+    })
+    // サーバーからは空白を除いた値が、項目の並び順も変わって届く
+    h.update({
+      ...h.session(),
+      team: {
+        ...h.session().team,
+        settings: { ...h.session().team.settings, eventTypes: [{ color: source.color, label: '朝練', id: source.id }] },
+      },
+    })
+    view.rerender(<SettingsTab />)
+    expect(screen.queryByText('別の管理者が予定の種類を変更しました。')).toBeNull()
+    expect((typeInput as HTMLInputElement).value).toBe('朝練')
+
+    const nameInput = screen.getByLabelText('このチームでの名前')
+    await user.clear(nameInput)
+    await user.type(nameInput, '新しい名前 ')
+    await user.click(within(nameInput.closest('form')!).getByRole('button', { name: '保存' }))
+    h.update({ ...h.session(), me: { ...h.session().me, displayName: '新しい名前' } })
+    view.rerender(<SettingsTab />)
+    expect(screen.queryByText('名前が別の操作で変更されました。')).toBeNull()
+    expect((nameInput as HTMLInputElement).value).toBe('新しい名前')
+  })
 })
 
 describe('settings and equipment writes', () => {
@@ -351,5 +387,27 @@ describe('team deletion recovery (#24)', () => {
       expect(screen.queryByRole('heading', {name:'チームを削除中です'})).toBeNull()
       expect(screen.queryByRole('button', {name:'削除を再開'})).toBeNull()
     }
+  })
+})
+
+// #39：メールアドレスを確認するまでは、確認待ちの画面だけを表示する
+describe('email verification gate (#39)', () => {
+  it('shows the verification screen to unverified users and lets them resend or re-check', async () => {
+    const h = harness()
+    const unverified = { uid: 'admin', email: 'admin@example.invalid', emailVerified: false }
+    vi.spyOn(h.repo.auth, 'onAuthStateChanged').mockImplementation((cb) => {
+      cb(unverified)
+      return () => {}
+    })
+    const resend = vi.spyOn(h.repo.auth, 'sendEmailVerification').mockResolvedValue()
+    const reload = vi.spyOn(h.repo.auth, 'reloadUser').mockResolvedValue()
+    render(<App />, { wrapper: h.wrapper })
+    expect(await screen.findByRole('heading', { name: 'メールアドレスを確認してください' })).toBeTruthy()
+    expect(screen.getByText('admin@example.invalid')).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'チームを作る' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: '確認メールを再送' }))
+    expect(resend).toHaveBeenCalledTimes(1)
+    await userEvent.click(screen.getByRole('button', { name: '確認しました' }))
+    expect(reload).toHaveBeenCalled()
   })
 })

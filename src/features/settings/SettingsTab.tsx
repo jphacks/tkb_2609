@@ -154,7 +154,14 @@ function NameForm({
     e.preventDefault()
     if (conflict || busy || !name.trim()) return
     setBusy(true)
-    await onSave(name)
+    const sent = name
+    const ok = await onSave(name)
+    // 保存した値（前後の空白を除いたもの）を下書きの基準にする。そのままだと自分の保存を
+    // 「別の操作で変更された」と判定してしまう（#41）。保存中に続けて編集した分は残す
+    if (ok !== false) {
+      const saved = sent.trim()
+      setDraft((d) => (d.value === sent ? { base: saved, value: saved } : { ...d, base: saved }))
+    }
     setBusy(false)
   }
 
