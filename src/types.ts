@@ -1,0 +1,86 @@
+// ドメインの型。構造は docs/data-model.md に合わせる。
+
+export type Role = 'admin' | 'member'
+
+/** 'present'（出席）は保存しない。attendance にキーがない人は出席扱い */
+export type AttendanceStatus = 'present' | 'absent' | 'observe' | 'late' | 'leave_early'
+export type StoredAttendance = Exclude<AttendanceStatus, 'present'>
+
+export type EventEditPolicy = 'admins' | 'all'
+
+export interface EventType {
+  id: string
+  label: string
+  color: string
+}
+
+export interface TeamSettings {
+  eventEditPolicy: EventEditPolicy
+  eventTypes: EventType[]
+}
+
+export interface Team {
+  id: string
+  name: string
+  createdBy: string
+  createdAt: Date
+  settings: TeamSettings
+}
+
+export interface Member {
+  uid: string
+  displayName: string
+  role: Role
+  joinedAt: Date
+}
+
+export interface TeamEvent {
+  id: string
+  title: string
+  typeId: string
+  startAt: Date
+  place: string | null
+  attendance: Record<string, StoredAttendance>
+  createdBy: string
+  updatedAt: Date
+}
+
+export interface EventInput {
+  title: string
+  typeId: string
+  startAt: Date
+  place: string | null
+}
+
+export interface EventNote {
+  id: string
+  authorUid: string
+  authorName: string
+  body: string
+  createdAt: Date
+}
+
+export interface EquipmentItem {
+  id: string
+  name: string
+  reading: string | null
+  holderUid: string | null
+  holderName: string | null
+  updatedAt: Date
+}
+
+export interface EquipmentInput {
+  name: string
+  reading: string | null
+}
+
+export interface AuthUser {
+  uid: string
+  email: string
+}
+
+export interface UserProfile {
+  uid: string
+  displayName: string
+  teamId: string | null
+}

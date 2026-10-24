@@ -1,0 +1,343 @@
+/* ---------- 一覧 ---------- */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skeleton {
+  height: 148px;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--surface-sunken), var(--surface), var(--surface-sunken));
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 64px 16px;
+  text-align: center;
+}
+
+.card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+/* 左端の色帯で予定の種類を示す */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--type-color);
+}
+
+.cardMain {
+  display: block;
+  width: 100%;
+  padding: 12px 14px 8px 18px;
+  border: none;
+  background: none;
+  text-align: left;
+}
+
+.cardMain:active {
+  background: var(--surface-sunken);
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.date {
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.relative {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.typeBadge {
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--type-color) 12%, white);
+  color: var(--type-color);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cardTitle {
+  margin-top: 4px;
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  gap: 14px;
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--text-sub);
+}
+
+.metaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.place {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.place svg {
+  flex-shrink: 0;
+}
+
+/* ---------- 出欠ボタン ---------- */
+
+.attendance {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  padding: 4px 12px 12px 18px;
+}
+
+.detail .attendance {
+  padding: 0;
+}
+
+.attButton {
+  min-height: 40px;
+  padding: 0;
+  border: 1.5px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text-sub);
+  font-size: 14px;
+  font-weight: 700;
+  transition:
+    background-color 0.12s,
+    border-color 0.12s,
+    color 0.12s;
+}
+
+.attButton[aria-checked='true'] {
+  border-color: var(--att-color);
+  background: var(--att-color);
+  color: #fff;
+}
+
+.fab {
+  position: fixed;
+  right: max(16px, calc((100vw - var(--app-max-w)) / 2 + 16px));
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 16px);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: var(--shadow-lg);
+}
+
+/* ---------- 詳細 ---------- */
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.detailHead {
+  position: relative;
+  overflow: hidden;
+  padding: 14px 16px 14px 20px;
+}
+
+.detailHead::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--type-color);
+}
+
+.detailTitle {
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.detailMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  color: var(--text-sub);
+}
+
+.detailSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attRow {
+  padding: 10px 14px;
+}
+
+.attRow + .attRow {
+  border-top: 1px solid var(--border);
+}
+
+.attRowHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.attDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--att-color);
+}
+
+.attLabel {
+  font-weight: 700;
+}
+
+.attCount {
+  margin-left: auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-sub);
+}
+
+.attNames {
+  margin-top: 4px;
+  padding-left: 18px;
+  font-size: 14px;
+  color: var(--text-sub);
+}
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+.note {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.noteHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 13px;
+}
+
+.noteAuthor {
+  font-weight: 700;
+}
+
+.noteDelete {
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+}
+
+.noteBody {
+  font-size: 15px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.noteForm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.deleteButton {
+  color: var(--danger);
+}
+
+/* ---------- 作成・編集 ---------- */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.typeChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.typeChoice {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  font-weight: 700;
+  color: var(--text-sub);
+}
+
+.typeChoice[aria-checked='true'] {
+  border-color: var(--type-color);
+  background: var(--type-color);
+  color: #fff;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
