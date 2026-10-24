@@ -20,7 +20,12 @@ export function EquipmentRow({ item, onMenu }: { item: EquipmentItem; onMenu(): 
   }
 
   return (
-    <div data-flip-id={item.id} className={`${styles.row} ${held ? styles.rowHeld : styles.rowFree}`}>
+    <div
+      role="group"
+      aria-label={item.name}
+      data-flip-id={item.id}
+      className={`${styles.row} ${held ? styles.rowHeld : styles.rowFree}`}
+    >
       <span className={styles.rowName}>{item.name}</span>
 
       {held ? (
@@ -28,7 +33,7 @@ export function EquipmentRow({ item, onMenu }: { item: EquipmentItem; onMenu(): 
           {isMine ? 'あなた' : item.holderName}
         </span>
       ) : (
-        <button className="btn btn-primary btn-sm" disabled={busy} onClick={hold}>
+        <button className="btn btn-primary btn-sm" disabled={busy} aria-label={`${item.name}を持つ`} onClick={hold}>
           持つ
         </button>
       )}

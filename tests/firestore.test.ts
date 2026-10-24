@@ -546,3 +546,95 @@ describe('concurrent changes and subscription errors', () => {
     off()
   })
 })
+
+describe('equipment/settings realtime integration (#9–#11)', () => {
+  it('delivers member and holder name updates to a listener on another client', async () => {
+    const a = await client(),
+      b = await client(),
+      t = await a.teams.create('更新チーム')
+    await b.teams.join(await a.teams.getJoinCode(t))
+    const item = await a.equipment.add(t, { name: 'ケース' })
+    const held = waitFor<EquipmentItem[]>(
+      (cb) => a.equipment.subscribe(t, cb),
+      (items) => items.some((i) => i.id === item && i.holderUid !== null),
+    )
+    await b.equipment.hold(t, item)
+    await held
+    const changedMember = waitFor<Member[]>(
+      (cb) => a.teams.subscribeMembers(t, cb),
+      (ms) => ms.some((m) => m.displayName === '新しい名前'),
+    )
+    const changedItem = waitFor<EquipmentItem[]>(
+      (cb) => a.equipment.subscribe(t, cb),
+      (items) => items[0]?.holderName === '新しい名前',
+    )
+    await b.users.updateDisplayName('新しい名前')
+    await Promise.all([changedMember, changedItem])
+    await a.equipment.update(t, item, { name: '収納ケース' })
+    await expect(b.equipment.add(t, { name: '収納ｹｰｽ' })).rejects.toThrow()
+    await expect(b.equipment.add(t, { name: '/不可' })).rejects.toThrow()
+    // Renaming frees the previous name reservation.
+    expect(await b.equipment.add(t, { name: 'ケース' })).toBeTruthy()
+  })
+  it('refuses forced release if the owner changed after confirmation opened', async () => {
+    const a = await client(),
+      b = await client(),
+      t = await a.teams.create('確認チーム')
+    await b.teams.join(await a.teams.getJoinCode(t))
+    const item = await a.equipment.add(t, { name: 'タイマー' })
+    const ub = await waitFor<AuthUser | null>(
+      (cb) => b.auth.onAuthStateChanged(cb),
+      (u) => u !== null,
+    )
+    await b.equipment.hold(t, item)
+    await b.equipment.release(t, item)
+    await a.equipment.hold(t, item)
+    await expect(a.equipment.forceRelease(t, item, ub!.uid)).rejects.toThrow('持ち主が変わりました')
+    const state = await waitFor<EquipmentItem[]>((cb) => a.equipment.subscribe(t, cb))
+    expect(state[0].holderUid).not.toBeNull()
+  })
+  it('propagates private code regeneration between admins but denies member subscription', async () => {
+    const a = await client(),
+      b = await client(),
+      t = await a.teams.create('招待チーム')
+    const old = await a.teams.getJoinCode(t)
+    await b.teams.join(old)
+    const ub = await waitFor<AuthUser | null>(
+      (cb) => b.auth.onAuthStateChanged(cb),
+      (u) => u !== null,
+    )
+    const errors: string[] = [],
+      stopErrors = b.onError!((e) => errors.push(e.message))
+    expect(await waitFor<string | null>((cb) => b.teams.subscribeJoinCode(t, cb))).toBeNull()
+    expect(errors).toHaveLength(1)
+    stopErrors()
+    await a.teams.setRole(t, ub!.uid, 'admin')
+    const codeChanged = waitFor<string | null>(
+      (cb) => b.teams.subscribeJoinCode(t, cb),
+      (code) => code !== null && code !== old,
+    )
+    const next = await a.teams.regenerateJoinCode(t)
+    expect(await codeChanged).toBe(next)
+    await expect(
+      a.teams.updateSettings(t, {
+        eventTypes: Array.from({ length: 11 }, (_, i) => ({ id: String(i), label: '種類', color: '#2563eb' })),
+      }),
+    ).rejects.toThrow()
+  })
+})
+
+describe('display name concurrency (#10)', () => {
+  it('keeps holderName consistent when taking equipment races with changing the display name', async () => {
+    const a = await client(),
+      t = await a.teams.create('名前更新チーム')
+    const first = await a.equipment.add(t, { name: 'ケース' }),
+      second = await a.equipment.add(t, { name: 'タイマー' })
+    await a.equipment.hold(t, first)
+    await Promise.all([a.users.updateDisplayName('更新後の名前'), a.equipment.hold(t, second)])
+    const items = await waitFor<EquipmentItem[]>(
+      (cb) => a.equipment.subscribe(t, cb),
+      (list) => list.length === 2 && list.every((i) => i.holderName === '更新後の名前'),
+    )
+    expect(items.every((i) => i.holderName === '更新後の名前')).toBe(true)
+  })
+})

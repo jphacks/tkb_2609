@@ -14,12 +14,16 @@ export interface RefreshState {
   /** 変わるたびに購読を張り直す */
   refreshKey: number
   refreshing: boolean
+  suspended: boolean
+  beginSubscription(): () => void
   refresh(): void
 }
 
 export const RefreshContext = createContext<RefreshState>({
   refreshKey: 0,
   refreshing: false,
+  suspended: false,
+  beginSubscription: () => () => {},
   refresh: () => {},
 })
 

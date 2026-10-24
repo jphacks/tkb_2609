@@ -54,6 +54,8 @@ export interface Repository {
     removeMember(teamId: string, uid: string): Promise<void>
     /** 管理者のみ */
     getJoinCode(teamId: string): Promise<string>
+    /** 管理者が表示中のコードのみ購読。再発行を他の端末へ反映する */
+    subscribeJoinCode(teamId: string, cb: (code: string | null) => void): Unsubscribe
     /** 管理者のみ。古いコードは無効になる */
     regenerateJoinCode(teamId: string): Promise<string>
   }
@@ -82,7 +84,7 @@ export interface Repository {
     /** 自分が持っている用具を手放す */
     release(teamId: string, itemId: string): Promise<void>
     /** 管理者のみ。他人が持っている用具を手放させる */
-    forceRelease(teamId: string, itemId: string): Promise<void>
+    forceRelease(teamId: string, itemId: string, expectedHolderUid?: string): Promise<void>
   }
 }
 

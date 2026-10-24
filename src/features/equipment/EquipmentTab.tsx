@@ -11,13 +11,14 @@ import styles from './equipment.module.css'
 import { MyItemsWidget } from './MyItemsWidget'
 import { useFlipAnimation } from './useFlipAnimation'
 
-type Panel = { kind: 'add' } | { kind: 'edit'; item: EquipmentItem } | { kind: 'menu'; item: EquipmentItem } | null
+type Panel = { kind: 'add' } | { kind: 'edit'; itemId: string } | { kind: 'menu'; itemId: string } | null
 
 export function EquipmentTab() {
   const repo = useRepository()
   const { team, user } = useSession()
   const items = useSubscription<EquipmentItem[]>((cb) => repo.equipment.subscribe(team.id, cb), [team.id])
   const [panel, setPanel] = useState<Panel>(null)
+  const selected = panel && panel.kind !== 'add' ? items?.find((item) => item.id === panel.itemId) : undefined
   const listRef = useRef<HTMLDivElement>(null)
 
   const sorted = useMemo(() => sortEquipment(items ?? []), [items])
@@ -48,18 +49,20 @@ export function EquipmentTab() {
         ) : (
           <div ref={listRef} className={styles.list}>
             {sorted.map((item) => (
-              <EquipmentRow key={item.id} item={item} onMenu={() => setPanel({ kind: 'menu', item })} />
+              <EquipmentRow key={item.id} item={item} onMenu={() => setPanel({ kind: 'menu', itemId: item.id })} />
             ))}
           </div>
         )}
       </section>
 
       {panel?.kind === 'add' && <EquipmentForm items={items} onClose={() => setPanel(null)} />}
-      {panel?.kind === 'edit' && <EquipmentForm item={panel.item} items={items} onClose={() => setPanel(null)} />}
-      {panel?.kind === 'menu' && (
+      {panel?.kind === 'edit' && selected && (
+        <EquipmentForm key={selected.id} item={selected} items={items} onClose={() => setPanel(null)} />
+      )}
+      {panel?.kind === 'menu' && selected && (
         <EquipmentMenu
-          item={panel.item}
-          onEdit={() => setPanel({ kind: 'edit', item: panel.item })}
+          item={selected}
+          onEdit={() => setPanel({ kind: 'edit', itemId: selected.id })}
           onClose={() => setPanel(null)}
         />
       )}

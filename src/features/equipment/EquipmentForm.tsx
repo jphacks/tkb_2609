@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useRepository, useSession } from '../../app/contexts'
 import { useFeedback } from '../../components/feedback/context'
 import { Sheet } from '../../components/Sheet'
-import { isDuplicateEquipmentName } from '../../lib/equipment'
+import { equipmentNameError, isDuplicateEquipmentName } from '../../lib/equipment'
 import type { EquipmentItem } from '../../types'
 import styles from './equipment.module.css'
 
@@ -12,22 +12,25 @@ export function EquipmentForm({
   onClose,
 }: {
   item?: EquipmentItem
-  /** 名前の重複チェック用 */
   items: EquipmentItem[]
   onClose(): void
 }) {
   const repo = useRepository()
   const { team } = useSession()
   const { run } = useFeedback()
-  const [name, setName] = useState(item?.name ?? '')
+  const initial = item?.name ?? ''
+  const [draft, setDraft] = useState({ base: initial, value: initial })
+  const dirty = draft.value !== draft.base && draft.value !== initial
+  const name = dirty ? draft.value : initial
+  const conflict = dirty && draft.base !== initial
   const [busy, setBusy] = useState(false)
   const duplicate = name.trim() !== '' && isDuplicateEquipmentName(items, name, item?.id)
-
+  const validation = name ? equipmentNameError(name) : null
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    if (duplicate) return
+    if (duplicate || conflict || equipmentNameError(name) || busy) return
     setBusy(true)
-    const input = { name: name.trim() }
+    const input = { name: name.normalize('NFKC').trim() }
     const ok = await run(
       () => (item ? repo.equipment.update(team.id, item.id, input) : repo.equipment.add(team.id, input)),
       item ? '用具を更新しました' : `${input.name}を追加しました`,
@@ -35,7 +38,6 @@ export function EquipmentForm({
     setBusy(false)
     if (ok) onClose()
   }
-
   return (
     <Sheet title={item ? '用具を編集' : '用具を追加'} onClose={onClose}>
       <form className={styles.form} onSubmit={submit}>
@@ -44,14 +46,33 @@ export function EquipmentForm({
           <input
             className="input"
             required
+            maxLength={100}
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => setDraft({ base: dirty ? draft.base : initial, value: e.target.value })}
             placeholder="救急箱"
-            aria-invalid={duplicate}
+            aria-invalid={duplicate || !!validation}
+            aria-describedby="equipment-name-error"
           />
-          {duplicate && <span className="error-text">同じ名前の用具がすでにあります</span>}
+          <span id="equipment-name-error" className="error-text">
+            {duplicate ? '同じ名前の用具がすでにあります' : validation}
+          </span>
         </label>
-        <button className="btn btn-primary btn-block" disabled={busy || !name.trim() || duplicate}>
+        {conflict && (
+          <div role="alert">
+            <p>別の操作で用具名が変更されました。最新の名前を確認してください。</p>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setDraft({ base: initial, value: initial })}
+            >
+              最新の名前に戻す
+            </button>
+          </div>
+        )}
+        <button
+          className="btn btn-primary btn-block"
+          disabled={busy || !name.trim() || duplicate || !!validation || conflict}
+        >
           {item ? '保存する' : '追加する'}
         </button>
       </form>

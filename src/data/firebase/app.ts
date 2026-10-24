@@ -3,7 +3,19 @@
 
 import { initializeApp, type FirebaseOptions } from 'firebase/app'
 import { connectAuthEmulator, getAuth } from 'firebase/auth'
-import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
+import {
+  connectFirestoreEmulator,
+  initializeFirestore,
+  memoryLocalCache,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore'
+
+// PR #19 の初期版で使っていた旧名。残ったままだとエミュレータのつもりで本番につながるおそれがあるため、
+// 起動を止めて書き換えを促す（エラーは src/data/index.ts が画面に表示する）
+if (import.meta.env.VITE_USE_FIREBASE_EMULATORS !== undefined) {
+  throw new Error('.env.local の VITE_USE_FIREBASE_EMULATORS は使われなくなりました。VITE_USE_EMULATOR に名前を変えてください')
+}
 
 export const useEmulator = import.meta.env.VITE_USE_EMULATOR === 'true'
 
@@ -34,7 +46,11 @@ if (!useEmulator && !config.apiKey) {
 
 export const app = initializeApp(config)
 export const auth = getAuth(app)
-export const db = getFirestore(app)
+// 本番では端末内（IndexedDB）にキャッシュし、起動直後や再接続時の表示と読み取り回数を抑える（Issue #11）。
+// 複数タブで開いても同じキャッシュを共有する。エミュレータでは毎回まっさらな状態で試せるようメモリのみ
+export const db = initializeFirestore(app, {
+  localCache: useEmulator ? memoryLocalCache() : persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+})
 
 if (useEmulator) {
   // スマホ実機（同じ Wi-Fi）から PC のエミュレータにつなぐときのため、開いているホスト名を使う。
