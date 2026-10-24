@@ -8,8 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "firebase emulators:exec --only auth,firestore --project demo-bukatsu \"vitest run\"",
     "emulators": "firebase emulators:start --project demo-bukatsu --only auth,firestore --import=.emulator-data --export-on-exit",
+    "test": "firebase emulators:exec --only auth,firestore --project demo-bukatsu \"vitest run\"",
     "typecheck:tests": "tsc -p tsconfig.test.json"
   },
   "dependencies": {

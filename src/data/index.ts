@@ -12,6 +12,7 @@ try {
     selected = mock
     reset = () => mock.reset()
   } else if (backend === 'firebase') {
+    // Firebase の初期化（設定の読み込み・エミュレータ接続）は firebase/app.ts に一本化している
     const [{ auth, db }, { createFirestoreRepository }] = await Promise.all([
       import('./firebase/app'),
       import('./firebase/firestoreRepository'),

@@ -1,10 +1,6 @@
 // .env.local で設定する環境変数の型（値の説明は .env.example を参照）
 interface ImportMetaEnv {
-  readonly VITE_DATA_BACKEND?: string
-  readonly VITE_USE_FIREBASE_EMULATORS?: string
-  readonly VITE_FIREBASE_AUTH_EMULATOR_URL?: string
-  readonly VITE_FIRESTORE_EMULATOR_HOST?: string
-  readonly VITE_FIRESTORE_EMULATOR_PORT?: string
+  readonly VITE_DATA_BACKEND?: 'mock' | 'firebase'
   readonly VITE_FIREBASE_API_KEY?: string
   readonly VITE_FIREBASE_AUTH_DOMAIN?: string
   readonly VITE_FIREBASE_PROJECT_ID?: string

@@ -3,7 +3,7 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.{ts,tsx}'],
     fileParallelism: false,
-    env: { VITE_DATA_BACKEND: 'mock', VITE_USE_FIREBASE_EMULATORS: 'true' },
+    env: { VITE_DATA_BACKEND: 'mock', VITE_USE_EMULATOR: 'true' },
     testTimeout: 20000,
     hookTimeout: 30000,
   },
