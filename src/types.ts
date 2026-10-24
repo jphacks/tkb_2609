@@ -20,6 +20,9 @@ export interface TeamSettings {
 }
 
 export interface Team {
+  /** 削除開始後は通常操作を停止し、削除者が再開する */
+  deleting?: boolean
+  deletionUid?: string
   id: string
   name: string
   createdBy: string
@@ -35,6 +38,7 @@ export interface Member {
 }
 
 export interface TeamEvent {
+  deleting?: boolean
   id: string
   title: string
   typeId: string
