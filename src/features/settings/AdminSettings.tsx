@@ -15,7 +15,6 @@ export function AdminSettings() {
       <JoinCodeSection />
       <EditPolicySection />
       <EventTypesSection />
-      <DeleteTeamSection />
     </>
   )
 }
@@ -196,7 +195,7 @@ function EventTypesSection() {
   )
 }
 
-function DeleteTeamSection() {
+export function DeleteTeamSection() {
   const repo = useRepository()
   const { team } = useSession()
   const { confirm, run } = useFeedback()

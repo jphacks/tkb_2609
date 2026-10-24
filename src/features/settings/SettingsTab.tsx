@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useRepository, useSession } from '../../app/contexts'
 import { useFeedback } from '../../components/feedback/context'
 import { isMock, resetMockData } from '../../data'
-import { AdminSettings } from './AdminSettings'
+import { AdminSettings, DeleteTeamSection } from './AdminSettings'
 import { MemberList } from './MemberList'
 import styles from './settings.module.css'
 
@@ -93,6 +93,20 @@ export function SettingsTab() {
 
       <MemberList />
 
+      {isMock && (
+        <section className={styles.mockBox}>
+          <p className={styles.mockTitle}>モック用</p>
+          <p className="hint">
+            別のタブで別のアカウントにログインすると、変更がリアルタイムに反映される様子を確認できます。
+          </p>
+          <button className={`btn btn-secondary btn-sm ${styles.danger}`} onClick={resetMock}>
+            データを初期状態に戻す
+          </button>
+        </section>
+      )}
+
+      {isAdmin && <DeleteTeamSection />}
+
       <section className={styles.section}>
         <h2 className="section-title">アカウント</h2>
         <div className={styles.accountActions}>
@@ -108,17 +122,7 @@ export function SettingsTab() {
         </div>
       </section>
 
-      {isMock && (
-        <section className={styles.mockBox}>
-          <p className={styles.mockTitle}>モック用</p>
-          <p className="hint">
-            別のタブで別のアカウントにログインすると、変更がリアルタイムに反映される様子を確認できます。
-          </p>
-          <button className={`btn btn-secondary btn-sm ${styles.danger}`} onClick={resetMock}>
-            データを初期状態に戻す
-          </button>
-        </section>
-      )}
+
     </div>
   )
 }
