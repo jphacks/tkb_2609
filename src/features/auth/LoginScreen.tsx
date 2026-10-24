@@ -5,6 +5,7 @@ import { isMock } from '../../data'
 import { MOCK_ACCOUNTS, MOCK_PASSWORD } from '../../data/mock/seed'
 import { RepositoryError } from '../../data/repository'
 import styles from './auth.module.css'
+import { GoogleSignIn } from './GoogleSignIn'
 
 export function LoginScreen({ onSignUp }: { onSignUp(): void }) {
   const repo = useRepository()
@@ -75,6 +76,8 @@ export function LoginScreen({ onSignUp }: { onSignUp(): void }) {
           パスワードを忘れた場合
         </button>
       </form>
+
+      <GoogleSignIn label="Google でログイン" />
 
       <div className={styles.switch}>
         <span className="muted">はじめての方は</span>

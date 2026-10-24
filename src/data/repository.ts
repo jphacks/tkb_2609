@@ -29,6 +29,8 @@ export interface Repository {
     onAuthStateChanged(cb: (user: AuthUser | null) => void): Unsubscribe
     signUp(input: { email: string; password: string; displayName: string }): Promise<void>
     signIn(email: string, password: string): Promise<void>
+    /** Google アカウントでログインする（初回は登録も兼ねる）。ログイン画面を閉じて中止した場合は何もしない */
+    signInWithGoogle(): Promise<void>
     signOut(): Promise<void>
     sendPasswordReset(email: string): Promise<void>
     /** ログイン中のユーザーに、メールアドレスの確認メールを（再）送信する */

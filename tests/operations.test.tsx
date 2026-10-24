@@ -8,6 +8,7 @@ import { RepositoryContext, SessionContext, type Session } from '../src/app/cont
 import { RefreshProvider } from '../src/app/RefreshProvider'
 import { FeedbackContext, type Feedback } from '../src/components/feedback/context'
 import { createMockRepository } from '../src/data/mock/mockRepository'
+import { LoginScreen } from '../src/features/auth/LoginScreen'
 import { EquipmentTab } from '../src/features/equipment/EquipmentTab'
 import { MyItemsWidget } from '../src/features/equipment/MyItemsWidget'
 import { SettingsTab } from '../src/features/settings/SettingsTab'
@@ -409,5 +410,44 @@ describe('email verification gate (#39)', () => {
     expect(resend).toHaveBeenCalledTimes(1)
     await userEvent.click(screen.getByRole('button', { name: '確認しました' }))
     expect(reload).toHaveBeenCalled()
+  })
+})
+
+// #31：Google でログイン。LINE などのアプリ内ブラウザでは Google がブロックするため、外部ブラウザで開くよう案内する
+describe('Google sign-in button (#31)', () => {
+  const LINE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari Line/14.16.0'
+  it('signs in with Google from the login screen', async () => {
+    const h = harness()
+    const signIn = vi.spyOn(h.repo.auth, 'signInWithGoogle').mockResolvedValue()
+    render(<LoginScreen onSignUp={() => {}} />, { wrapper: h.wrapper })
+    await userEvent.click(screen.getByRole('button', { name: 'Google でログイン' }))
+    expect(signIn).toHaveBeenCalledTimes(1)
+  })
+  it('shows the error and lets the user try again', async () => {
+    const h = harness()
+    const { RepositoryError } = await import('../src/data/repository')
+    vi.spyOn(h.repo.auth, 'signInWithGoogle').mockRejectedValue(new RepositoryError('ログイン画面がブロックされました。'))
+    render(<LoginScreen onSignUp={() => {}} />, { wrapper: h.wrapper })
+    await userEvent.click(screen.getByRole('button', { name: 'Google でログイン' }))
+    expect(await screen.findByText('ログイン画面がブロックされました。')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Google でログイン' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+  it('replaces the button with a link to open an external browser inside LINE', async () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(LINE_UA)
+    const h = harness()
+    render(<LoginScreen onSignUp={() => {}} />, { wrapper: h.wrapper })
+    expect(screen.queryByRole('button', { name: 'Google でログイン' })).toBeNull()
+    expect(screen.getByText(/LINE内のブラウザでは、Google でログインできません/)).toBeTruthy()
+    const link = screen.getByRole('link', { name: 'ブラウザで開く' }) as HTMLAnchorElement
+    expect(new URL(link.href).searchParams.get('openExternalBrowser')).toBe('1')
+    // メールアドレスとパスワードでのログインは、このまま使える
+    expect(screen.getByRole('button', { name: 'ログイン' })).toBeTruthy()
+  })
+  it('signs a mock user in with the mock Google account', async () => {
+    const h = harness()
+    const users: (string | undefined)[] = []
+    h.repo.auth.onAuthStateChanged((u) => users.push(u?.email))
+    await h.repo.auth.signInWithGoogle()
+    expect(users.at(-1)).toBe('google-user@example.com')
   })
 })

@@ -8,8 +8,16 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { initializeApp, deleteApp, type FirebaseApp } from 'firebase/app'
-import { connectAuthEmulator, getAuth } from 'firebase/auth'
+import { initializeApp, deleteApp, FirebaseError, type FirebaseApp } from 'firebase/app'
+import {
+  connectAuthEmulator,
+  getAuth,
+  GoogleAuthProvider,
+  signInWithCredential,
+  signInWithEmailAndPassword,
+  type Auth,
+  type UserCredential,
+} from 'firebase/auth'
 import {
   collection,
   connectFirestoreEmulator,
@@ -283,13 +291,17 @@ function waitFor<T>(
     })
   })
 }
-async function client(verify = true): Promise<Repository> {
+function emulatorApp() {
   const app = initializeApp({ projectId, apiKey: 'fake-api-key', appId: 'fake-app-id' }, randomUUID())
   apps.push(app)
   const auth = getAuth(app),
     db = getFirestore(app)
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
   connectFirestoreEmulator(db, '127.0.0.1', 8080)
+  return { auth, db }
+}
+async function client(verify = true): Promise<Repository> {
+  const { auth, db } = emulatorApp()
   const r = createFirestoreRepository(auth, db)
   await r.auth.signUp({ email: `${randomUUID()}@example.invalid`, password: 'Example123!', displayName: 'テスト' })
   if (verify) {
@@ -800,5 +812,56 @@ describe('multi-team security boundaries (#24)', () => {
     // 管理者であっても、メンバー削除と所属更新は同一書き込みが必要。
     await assertFails(deleteDoc(doc(admin,'teams/t/members/member')))
     await assertSucceeds(deleteDoc(doc(admin,'teams/t/equipment/item')))
+  })
+})
+
+// #31：Google ログイン。テストではポップアップの代わりに、Auth エミュレータが受け付ける署名なしの ID トークンでログインする
+function googleClient(account: { email: string; name: string }, googleSignIn?: (auth: Auth) => Promise<UserCredential>) {
+  const { auth, db } = emulatorApp()
+  const idToken = JSON.stringify({ sub: randomUUID(), email: account.email, email_verified: true, name: account.name })
+  const repo = createFirestoreRepository(auth, db, {
+    googleSignIn: googleSignIn ?? ((a) => signInWithCredential(a, GoogleAuthProvider.credential(idToken))),
+  })
+  return { repo, auth }
+}
+describe('Google sign-in (#31)', () => {
+  it('creates a verified account named after the Google account, which can create a team right away', async () => {
+    const { repo } = googleClient({ email: `${randomUUID()}@gmail.example`, name: 'グーグル 花子' })
+    await repo.auth.signInWithGoogle()
+    const me = (await waitFor<AuthUser | null>((cb) => repo.auth.onAuthStateChanged(cb), (u) => !!u))!
+    expect(me.emailVerified).toBe(true)
+    const profile = await waitFor<UserProfile | null>((cb) => repo.users.subscribeProfile(me.uid, cb), (p) => !!p)
+    expect(profile).toMatchObject({ displayName: 'グーグル 花子', teamIds: [] })
+    await expect(repo.teams.create('Google のチーム', '花子')).resolves.toBeTypeOf('string')
+  })
+  it('does nothing when the Google window is closed, and reports a blocked window', async () => {
+    const closed = googleClient({ email: 'unused@gmail.example', name: '未使用' }, async () => {
+      throw new FirebaseError('auth/popup-closed-by-user', 'closed')
+    })
+    await expect(closed.repo.auth.signInWithGoogle()).resolves.toBeUndefined()
+    expect(closed.auth.currentUser).toBeNull()
+    const blocked = googleClient({ email: 'unused@gmail.example', name: '未使用' }, async () => {
+      throw new FirebaseError('auth/popup-blocked', 'blocked')
+    })
+    await expect(blocked.repo.auth.signInWithGoogle()).rejects.toThrow('ポップアップを許可')
+  })
+  it('signs into the existing account when the same verified email was registered with a password', async () => {
+    const email = `${randomUUID()}@gmail.example`
+    const { auth, db } = emulatorApp()
+    const byPassword = createFirestoreRepository(auth, db)
+    await byPassword.auth.signUp({ email, password: 'Example123!', displayName: 'パスワード 太郎' })
+    const uid = auth.currentUser!.uid
+    await markEmailVerified(uid)
+    await byPassword.auth.reloadUser()
+    const teamId = await byPassword.teams.create('既存のチーム', '太郎')
+
+    const google = googleClient({ email, name: 'グーグル 太郎' })
+    await google.repo.auth.signInWithGoogle()
+    expect(google.auth.currentUser!.uid).toBe(uid)
+    const profile = await waitFor<UserProfile | null>((cb) => google.repo.users.subscribeProfile(uid, cb), (p) => !!p)
+    expect(profile).toMatchObject({ displayName: 'パスワード 太郎', teamIds: [teamId] })
+    // 確認済みのアカウントでは、Google と連携したあともパスワードでログインできる
+    await byPassword.auth.signOut()
+    await expect(signInWithEmailAndPassword(auth, email, 'Example123!')).resolves.toBeTruthy()
   })
 })

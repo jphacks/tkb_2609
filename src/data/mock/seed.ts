@@ -10,6 +10,9 @@ export const MOCK_ACCOUNTS = [
   { email: 'newcomer@example.com', label: 'チーム未所属' },
 ]
 
+/** モックの「Google でログイン」で使うアカウント（初回はチーム未所属） */
+export const MOCK_GOOGLE_ACCOUNT = { email: 'google-user@example.com', displayName: 'Google 太郎' }
+
 const TEAM_ID = 'team-sample'
 
 const MEMBERS: [uid: string, name: string, role: Member['role']][] = [
