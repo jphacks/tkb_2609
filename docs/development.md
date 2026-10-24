@@ -11,6 +11,67 @@ npm run lint     # oxlint
 
 スマホ実機で確認するときは `npm run dev -- --host` で起動し、同じ Wi-Fi から PC の IP アドレスにアクセスする。
 
+## Firebase
+
+### 初回だけ
+
+```sh
+cp .env.example .env.local   # .env.local はコミットしない
+```
+
+- 開発中は `.env.local` の `VITE_USE_EMULATOR=true` のままにする。ローカルのエミュレータに接続し、本番のデータには一切触れない
+- エミュレータには Java 11 以上が必要（`java -version` で確認）
+- 本番の Firebase につなぐときだけ、`.env.local` に Firebase コンソールの設定値を入れて `VITE_USE_EMULATOR=false` にする
+
+### エミュレータ（Auth・Firestore）
+
+```sh
+npm run emulators   # 別のターミナルで起動したままにする
+```
+
+| 用途 | URL |
+| --- | --- |
+| 管理画面（ユーザーやデータの確認・削除） | http://127.0.0.1:4000 |
+| Authentication | 127.0.0.1:9099 |
+| Firestore | 127.0.0.1:8080 |
+
+- プロジェクト ID は `demo-bukatsu`。`demo-` で始まる ID は本番の Firebase につながらない
+- 終了時（`Ctrl+C`）にデータを `.emulator-data/` に保存し、次回の起動時に読み込む。消したいときはこのフォルダを削除する
+- 同じ Wi-Fi のスマホからも接続できるよう、エミュレータは `0.0.0.0` で待ち受ける。アプリは開いたホスト名（PC の IP アドレス）のエミュレータにつなぐ
+- 初回起動時に Firestore エミュレータ（約 140MB）をダウンロードする。回線が不安定で失敗したら、もう一度起動する
+
+### 本番の Firebase プロジェクト
+
+| 項目 | 値 |
+| --- | --- |
+| プロジェクト ID | `bukatsu20261024`（`.firebaserc` の別名 `prod`） |
+| オーナー | `oniwasobi@gmail.com` |
+| プラン | Spark（無料）。Blaze にはアップグレードしない |
+| 有効な機能 | Authentication（メール／パスワード）、Firestore（本番環境モード） |
+
+- `.firebaserc` の `default` はエミュレータ用の `demo-bukatsu`。本番を操作するコマンドには必ず `--project prod` を付ける（付け忘れても本番には触れない）
+- CLI で本番を操作するには、Firebase コンソールの「プロジェクトの設定 → ユーザーと権限」で自分の Google アカウントをメンバーに追加してもらう
+- `.env.local` の設定値は、チャットや LINE で個別に受け取る（GitHub には上げない）
+
+### モックと Firebase の切り替え
+
+`.env.local` の `VITE_DATA_BACKEND` で接続先を選ぶ。
+
+| 値 | 接続先 |
+| --- | --- |
+| `mock`（既定） | メモリ上のダミーデータ（`src/data/mock/`） |
+| `firebase` | Firebase Auth と Firestore（`VITE_USE_EMULATOR=true` ならエミュレータ） |
+
+ルールのテスト（`npm test`）やアカウントの扱いなど、Firebase 接続の詳細は [Firebase 接続ガイド](firebase.md) を参照。
+
+### コードからの使い方
+
+`src/data/firebase/app.ts` の `auth` と `db` を使う。エミュレータへの接続や設定値の読み込みはこのファイルで済ませてある。
+
+### セキュリティルール
+
+`firestore.rules`（Issue #7）。方針は `docs/data-model.md`、検証方法は [Firebase 接続ガイド](firebase.md) を参照。本番への反映は `--project prod` を付けて行う。
+
 ## 現在の状態：モック
 
 データは `src/data/mock/` のメモリ上の実装で動いている（Firebase には未接続）。
@@ -34,6 +95,7 @@ src/
   types.ts              … ドメインの型（docs/data-model.md と対応）
   data/
     repository.ts       … データ読み書きのインターフェース
+    firebase/app.ts     … Firebase の初期化（auth・db を提供、エミュレータ接続）
     mock/               … モック実装と初期データ
     index.ts            … 使う実装の切り替え（Firestore 版はここで差し替える）
   app/                  … 起動・ログイン振り分け・タブ・共通の Context
@@ -51,3 +113,18 @@ src/
 - 共通のデザイントークン（色・角丸など）とボタン・入力欄は `src/index.css`
 - 画面ごとのレイアウトは各ディレクトリの `*.module.css`（CSS Modules）
 - 色は直接書かず、`index.css` の CSS 変数を使う
+
+## 用具・設定・更新の確認（#9〜#11）
+
+- 用具：空き優先・用具名順、ウィジェットの上限スクロール、複数用具の手放し、重複名拒否、編集・削除の確認、管理者の強制手放しを確認する。Issue #9のよみがなは後続の設計決定で廃止済みのため追加しない。
+- 設定：表示名変更、参加コードの表示・コピー・LINE共有・再発行、予定の編集権限・種類、管理者の付与・解除を確認する。別の操作で名前や種類が変わった場合、未保存の入力を残し、最新値を明示的に読み直してから保存する。
+- 更新：再取得中表示は固定の待ち時間ではなく各購読の初回通知まで。初回通知はキャッシュの場合もあり、サーバーへの同期完了を保証する表示ではない。エラーは別途トーストで通知する。
+- 管理者が参加コードを表示した間だけコードを購読する。他の管理者が再発行すると表示と共有内容も変わる。
+- 非表示中はデータ購読を停止し、復帰したときに張り直す。画面復帰と同じ状態のvisibilityイベントが続いても重複購読しない。
+
+```sh
+npx vitest run tests/subscriptions.test.tsx tests/operations.test.tsx
+npm test  # 上記に加えてAuth/Firestoreエミュレータで統合検証
+```
+
+テストはローカル設定に関係なくモックまたは `demo-bukatsu` のエミュレータだけを使う。料金見積もりの前提・限界は `docs/free-tier.md` を参照する。

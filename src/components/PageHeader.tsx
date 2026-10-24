@@ -23,6 +23,7 @@ export function PageHeader({ title, onBack, actions }: { title: string; onBack?(
         className={`icon-btn ${refreshing ? styles.spinning : ''}`}
         onClick={refresh}
         aria-label="最新の情報に更新"
+        aria-busy={refreshing}
       >
         <RefreshIcon size={22} />
       </button>

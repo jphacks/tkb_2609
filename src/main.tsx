@@ -6,16 +6,23 @@ import { App } from './app/App'
 import { RefreshProvider } from './app/RefreshProvider'
 import { RepositoryContext } from './app/contexts'
 import { FeedbackProvider } from './components/feedback/FeedbackProvider'
-import { repository } from './data'
+import { initializationError, repository } from './data'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <RepositoryContext.Provider value={repository}>
-      <RefreshProvider>
-        <FeedbackProvider>
-          <App />
-        </FeedbackProvider>
-      </RefreshProvider>
-    </RepositoryContext.Provider>
+    {initializationError ? (
+      <main className="card" role="alert" style={{ margin: 24, padding: 24 }}>
+        <h1>接続設定を確認してください</h1>
+        <p>{initializationError}</p>
+      </main>
+    ) : (
+      <RepositoryContext.Provider value={repository}>
+        <RefreshProvider>
+          <FeedbackProvider>
+            <App />
+          </FeedbackProvider>
+        </RefreshProvider>
+      </RepositoryContext.Provider>
+    )}
   </StrictMode>,
 )

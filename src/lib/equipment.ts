@@ -22,3 +22,13 @@ export function isDuplicateEquipmentName(items: EquipmentItem[], name: string, e
   const key = equipmentNameKey(name)
   return items.some((item) => item.id !== exceptId && equipmentNameKey(item.name) === key)
 }
+
+/** UIとFirestore実装で同じ入力制約を使う。 */
+export function equipmentNameError(input: string): string | null {
+  const name = input.normalize('NFKC').trim(),
+    key = equipmentNameKey(name)
+  if (!key) return '用具名を入力してください'
+  if (name.length > 100) return '用具名は100文字以内で入力してください'
+  if (key.includes('/') || key === '.' || key === '..' || key.startsWith('__')) return '用具名にこの文字は使えません'
+  return null
+}

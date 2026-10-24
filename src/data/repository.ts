@@ -21,6 +21,8 @@ import type {
 export type Unsubscribe = () => void
 
 export interface Repository {
+  /** Firestoreの購読失敗を画面へ通知する（モックでは不要） */
+  onError?(cb: (error: RepositoryError) => void): Unsubscribe
   auth: {
     onAuthStateChanged(cb: (user: AuthUser | null) => void): Unsubscribe
     signUp(input: { email: string; password: string; displayName: string }): Promise<void>
@@ -52,13 +54,15 @@ export interface Repository {
     removeMember(teamId: string, uid: string): Promise<void>
     /** 管理者のみ */
     getJoinCode(teamId: string): Promise<string>
+    /** 管理者が表示中のコードのみ購読。再発行を他の端末へ反映する */
+    subscribeJoinCode(teamId: string, cb: (code: string | null) => void): Unsubscribe
     /** 管理者のみ。古いコードは無効になる */
     regenerateJoinCode(teamId: string): Promise<string>
   }
   events: {
     /** 今日以降の予定を近い順に */
     subscribeUpcoming(teamId: string, cb: (events: TeamEvent[]) => void): Unsubscribe
-    create(teamId: string, input: EventInput): Promise<string>
+    create(teamId: string, input: EventInput, initialNote?: string): Promise<string>
     update(teamId: string, eventId: string, input: EventInput): Promise<void>
     remove(teamId: string, eventId: string): Promise<void>
     /** 自分の出欠のみ。'present' を渡すとキーを削除する */
@@ -80,7 +84,7 @@ export interface Repository {
     /** 自分が持っている用具を手放す */
     release(teamId: string, itemId: string): Promise<void>
     /** 管理者のみ。他人が持っている用具を手放させる */
-    forceRelease(teamId: string, itemId: string): Promise<void>
+    forceRelease(teamId: string, itemId: string, expectedHolderUid?: string): Promise<void>
   }
 }
 

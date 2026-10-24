@@ -64,8 +64,8 @@ export function SettingsTab() {
         <div className={`card ${styles.group}`}>
           {isAdmin ? (
             <NameForm
-              key={team.name}
               id="team-name"
+              maxLength={60}
               label="チーム名（管理者が変更できます）"
               initial={team.name}
               onSave={(name) => run(() => repo.teams.rename(team.id, name), 'チーム名を変更しました')}
@@ -103,7 +103,9 @@ export function SettingsTab() {
             チームを離れる
           </button>
           {isLastAdmin && (
-            <p className="hint">あなたは最後の管理者のため、チームを離れられません。他のメンバーを管理者にしてください。</p>
+            <p className="hint">
+              あなたは最後の管理者のため、チームを離れられません。他のメンバーを管理者にしてください。
+            </p>
           )}
         </div>
       </section>
@@ -129,18 +131,24 @@ function NameForm({
   label,
   initial,
   onSave,
+  maxLength = 40,
 }: {
   id: string
   label: string
   initial: string
   onSave(name: string): Promise<unknown>
+  maxLength?: number
 }) {
-  const [name, setName] = useState(initial)
+  const [draft, setDraft] = useState({ base: initial, value: initial })
+  const dirty = draft.value !== draft.base && draft.value !== initial
+  const name = dirty ? draft.value : initial
+  const conflict = dirty && draft.base !== initial
   const [busy, setBusy] = useState(false)
   const changed = name.trim() !== '' && name.trim() !== initial
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
+    if (conflict || busy || !name.trim()) return
     setBusy(true)
     await onSave(name)
     setBusy(false)
@@ -152,13 +160,32 @@ function NameForm({
         {label}
       </label>
       <div className={styles.inlineForm}>
-        <input id={id} className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        <input
+          id={id}
+          className="input"
+          required
+          maxLength={maxLength}
+          value={name}
+          onChange={(e) => setDraft({ base: dirty ? draft.base : initial, value: e.target.value })}
+        />
         {changed && (
-          <button className="btn btn-primary btn-sm" disabled={busy}>
+          <button className="btn btn-primary btn-sm" disabled={busy || conflict}>
             保存
           </button>
         )}
       </div>
+      {conflict && (
+        <div role="alert">
+          <p>名前が別の操作で変更されました。</p>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setDraft({ base: initial, value: initial })}
+          >
+            最新の名前に戻す
+          </button>
+        </div>
+      )}
     </form>
   )
 }
