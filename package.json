@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:hosting": "VITE_DATA_BACKEND=firebase VITE_USE_EMULATOR=false npm run build",
+    "deploy:hosting": "firebase deploy --only hosting --project prod",
     "lint": "oxlint",
     "preview": "vite preview",
     "emulators": "firebase emulators:start --project demo-bukatsu --only auth,firestore --import=.emulator-data --export-on-exit",
