@@ -1,8 +1,9 @@
 import ts from 'typescript'
 import fs from 'node:fs'
 import path from 'node:path'
+import os from 'node:os'
 import assert from 'node:assert/strict'
-const out='/private/tmp/bukatsu-mock-check'
+const out=fs.mkdtempSync(path.join(os.tmpdir(), 'bukatsu-mock-check-'))
 for (const name of ['types','data/repository','data/mock/mockRepository','data/mock/seed','lib/equipment','lib/joinCode']) {
  const target=path.join(out,name+'.js');fs.mkdirSync(path.dirname(target),{recursive:true})
  const source=fs.readFileSync('src/'+name+'.ts','utf8')
@@ -44,4 +45,5 @@ storage.set('bukatsu:mock-db:v2',JSON.stringify(legacy))
 const migrated=createMockRepository()
 profile=await read(cb=>migrated.users.subscribeProfile('u-member',cb))
 assert.equal(profile.teamIds.length,2)
+fs.rmSync(out, {recursive:true, force:true})
 console.log('PASS: 複数所属、重複参加拒否、名前分離、用具名同期、離脱、再参加、保存復元、旧データ移行')
