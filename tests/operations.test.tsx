@@ -9,6 +9,7 @@ import { RefreshProvider } from '../src/app/RefreshProvider'
 import { FeedbackContext, type Feedback } from '../src/components/feedback/context'
 import { createMockRepository } from '../src/data/mock/mockRepository'
 import { LoginScreen } from '../src/features/auth/LoginScreen'
+import { SignUpScreen } from '../src/features/auth/SignUpScreen'
 import { EquipmentTab } from '../src/features/equipment/EquipmentTab'
 import { MyItemsWidget } from '../src/features/equipment/MyItemsWidget'
 import { SettingsTab } from '../src/features/settings/SettingsTab'
@@ -449,5 +450,41 @@ describe('Google sign-in button (#31)', () => {
     h.repo.auth.onAuthStateChanged((u) => users.push(u?.email))
     await h.repo.auth.signInWithGoogle()
     expect(users.at(-1)).toBe('google-user@example.com')
+  })
+})
+
+// #33：パスワードの表示・非表示の切り替え
+describe('password visibility toggle (#33)', () => {
+  it('switches the field type without submitting the form or moving the focus and cursor', async () => {
+    const h = harness()
+    const signIn = vi.spyOn(h.repo.auth, 'signIn')
+    const user = userEvent.setup()
+    render(<LoginScreen onSignUp={() => {}} />, { wrapper: h.wrapper })
+    const field = screen.getByLabelText('パスワード') as HTMLInputElement
+    expect(field.type).toBe('password')
+    expect(field.autocomplete).toBe('current-password')
+    await user.type(field, 'Abcd#123')
+    field.setSelectionRange(2, 2)
+    const toggle = screen.getByRole('button', { name: 'パスワードを表示' })
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    await user.click(toggle)
+    expect(field.type).toBe('text')
+    expect(field.value).toBe('Abcd#123')
+    expect(document.activeElement).toBe(field)
+    expect([field.selectionStart, field.selectionEnd]).toEqual([2, 2])
+    expect(field.getAttribute('autocapitalize')).toBe('none')
+    expect(field.autocomplete).toBe('current-password')
+    const hide = screen.getByRole('button', { name: 'パスワードを隠す' })
+    expect(hide.getAttribute('aria-pressed')).toBe('true')
+    expect(signIn).not.toHaveBeenCalled()
+    await user.click(hide)
+    expect(field.type).toBe('password')
+  })
+  it('is available on the sign-up screen with the new-password autocomplete', () => {
+    const h = harness()
+    render(<SignUpScreen onLogin={() => {}} />, { wrapper: h.wrapper })
+    const field = screen.getByLabelText('パスワード') as HTMLInputElement
+    expect(field.autocomplete).toBe('new-password')
+    expect(screen.getByRole('button', { name: 'パスワードを表示' })).toBeTruthy()
   })
 })
