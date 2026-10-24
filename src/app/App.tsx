@@ -40,7 +40,7 @@ function SignedIn({ user }: { user: AuthUser }) {
   if (profile === null) return <ConnectionIssue />
   // 2回目以降のログインでは teamId がわかるので、参加コードの入力は不要
   if (!profile.teamId || adding) return <TeamEntryScreen profile={profile} onDone={profile.teamId ? () => setAdding(false) : undefined} />
-  // チームの切り替え・追加は、複数チーム所属に対応した実装（現在はモック）でのみ表示する
+  // 対応するリポジトリでチームの切り替え・追加を表示する
   return <>
     {repo.supports?.multipleTeams && <div className={styles.teamSwitcher}>
       <label className="field">
@@ -76,6 +76,7 @@ function TeamSession({ user, profile, teamId }: { user: AuthUser; profile: UserP
   }, [user, profile, team, members])
 
   if (team === undefined || members === undefined) return <Splash />
+  if (team?.deleting) return <TeamDeletion teamId={teamId} canResume={team.deletionUid === user.uid} />
   if (!session) return <ConnectionIssue />
   return (
     <SessionContext.Provider value={session}>
@@ -102,6 +103,24 @@ function ConnectionIssue() {
       >
         ログアウト
       </button>
+    </main>
+  )
+}
+
+function TeamDeletion({ teamId, canResume }: { teamId: string; canResume: boolean }) {
+  const repo = useRepository()
+  const { run } = useFeedback()
+  const [busy, setBusy] = useState(false)
+  return (
+    <main className="card" style={{ margin: 24, padding: 24 }}>
+      <h1>チームを削除中です</h1>
+      <p>削除を開始した管理者は、通信状態を確認して削除を再開できます。他のチームには影響しません。</p>
+      {canResume && <button className="btn btn-danger" disabled={busy} onClick={async () => {
+        setBusy(true)
+        await run(() => repo.teams.remove(teamId), 'チームを削除しました')
+        setBusy(false)
+      }}>削除を再開</button>}
+      <button className="btn btn-secondary" onClick={() => run(() => repo.auth.signOut())}>ログアウト</button>
     </main>
   )
 }

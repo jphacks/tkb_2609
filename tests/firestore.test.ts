@@ -639,33 +639,102 @@ describe('display name concurrency (#10)', () => {
   })
 })
 
-// PR #21 で Repository が複数チーム所属に対応したが、Firebase 版は当面1人1チームのまま動かす
-describe('Firestore repository: single-team behavior behind the multi-team interface', () => {
-  it('uses the team display name, lists only the current team and rejects unsupported operations', async () => {
-    const a = await client(),
-      b = await client()
-    const me = (await waitFor<AuthUser | null>((cb) => b.auth.onAuthStateChanged(cb), (u) => !!u))!
-    const t = await a.teams.create('単一チーム', '管理者の名前')
-    expect((await waitFor<Member[]>((cb) => a.teams.subscribeMembers(t, cb)))[0].displayName).toBe('管理者の名前')
+describe('Firebase multiple-team membership (#24)', () => {
+  it('keeps account and team names separate, switches teams and detaches only one membership', async () => {
+    const a = await client(), b = await client()
+    const ub = (await waitFor<AuthUser | null>((cb) => b.auth.onAuthStateChanged(cb), (u) => !!u))!
+    const t = await a.teams.create('第一チーム', '管理者の名前')
+    await b.teams.join(await a.teams.getJoinCode(t), '第一の名前')
+    const other = await b.teams.create('第二チーム', '第二の名前')
+    expect(b.supports).toEqual({multipleTeams: true, deleteTeam: true})
+    const mine = await waitFor<Team[]>((cb) => b.teams.subscribeMine(cb), (ts) => ts.length === 2)
+    expect(mine.map((team) => team.id).sort()).toEqual([t, other].sort())
+    await b.teams.select(t)
+    await expect(b.teams.select('outsider')).rejects.toThrow()
+    await expect(b.teams.join(await a.teams.getJoinCode(t), '上書き')).rejects.toThrow()
+    await b.users.updateDisplayName(t, '第一のみ変更')
+    let profile = await waitFor<UserProfile | null>((cb) => b.users.subscribeProfile(ub.uid, cb), (p) => p?.teamId === t)
+    expect(profile).toMatchObject({teamIds: [t, other], teamId: t, displayName: 'テスト'})
+    expect((await waitFor<Member[]>((cb) => b.teams.subscribeMembers(other, cb)))[0].displayName).toBe('第二の名前')
+    await a.teams.removeMember(t, ub.uid)
+    profile = await waitFor<UserProfile | null>((cb) => b.users.subscribeProfile(ub.uid, cb), (p) => p?.teamId === other)
+    expect(profile?.teamIds).toEqual([other])
+  })
+  it('deletes all nested data and codes, preserves other teams and supports resuming after interruption', async () => {
+    const a = await client(), b = await client()
+    const ua = (await waitFor<AuthUser | null>((cb) => a.auth.onAuthStateChanged(cb), (u) => !!u))!
+    const ub = (await waitFor<AuthUser | null>((cb) => b.auth.onAuthStateChanged(cb), (u) => !!u))!
+    const t = await a.teams.create('削除対象', '管理者')
+    const code = await a.teams.getJoinCode(t)
+    await b.teams.join(code, 'メンバー')
+    const other = await b.teams.create('維持するチーム', '維持する名前')
+    const e = await a.events.create(t, {title:'予定',typeId:'practice',startAt:new Date(),place:null})
+    const item = await a.equipment.add(t, {name:'用具'})
+    await b.equipment.hold(t, item)
+    await expect(b.teams.remove(t)).rejects.toThrow()
+    // 削除開始後にタブを閉じた状態を再現。100件のページ境界を超えるメモも清掃する。
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore() as unknown as Firestore
+      const batch = writeBatch(db)
+      batch.update(doc(db, 'teams', t), {deletionUid: ua.uid})
+      for (let n=0;n<205;n++) batch.set(doc(db, `teams/${t}/events/${e}/notes/n${n}`),
+        {authorUid:ub.uid,authorName:'メンバー',body:'メモ',createdAt:now()})
+      await batch.commit()
+    })
+    await expect(b.events.addNote(t,e,'停止後のメモ')).rejects.toThrow()
+    await expect(b.equipment.add(t,{name:'停止後の用具'})).rejects.toThrow()
+    const newcomer = await client()
+    await expect(newcomer.teams.join(code,'削除中への参加')).rejects.toThrow()
+    await Promise.all([a.teams.remove(t), a.teams.remove(t)])
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore() as unknown as Firestore
+      for (const path of [`teams/${t}/events/${e}/notes`, `teams/${t}/events`, `teams/${t}/equipment`,
+        `teams/${t}/equipmentNames`, `teams/${t}/members`, `teams/${t}/private`])
+        expect((await getDocs(collection(db,path))).empty).toBe(true)
+      expect((await getDoc(doc(db,'teams',t))).exists()).toBe(false)
+      expect((await getDoc(doc(db,'joinCodes',code))).exists()).toBe(false)
+      expect((await getDoc(doc(db,'users',ua.uid))).data()).toMatchObject({teamIds:[],teamId:null})
+      expect((await getDoc(doc(db,'users',ub.uid))).data()).toMatchObject({teamIds:[other],teamId:other,displayName:'テスト'})
+      expect((await getDoc(doc(db,'teams',other))).exists()).toBe(true)
+    })
+  })
+  it('migrates legacy single-team profiles without losing the membership', async () => {
+    const r = await client()
+    const user = (await waitFor<AuthUser | null>((cb) => r.auth.onAuthStateChanged(cb), (u) => !!u))!
+    const t = await r.teams.create('旧チーム','旧表示名')
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore() as unknown as Firestore
+      await setDoc(doc(db,'users',user.uid), {displayName:'アカウント名',teamId:t})
+    })
+    await r.auth.signOut()
+    await r.auth.signIn(user.email, 'Example123!')
+    expect(await waitFor<UserProfile | null>((cb) => r.users.subscribeProfile(user.uid,cb))).toMatchObject({teamId:t,teamIds:[t],displayName:'アカウント名'})
+  })
+})
 
-    expect(await waitFor<Team[]>((cb) => b.teams.subscribeMine(cb))).toEqual([])
-    await b.teams.join(await a.teams.getJoinCode(t), 'チームでの名前')
-    const mine = await waitFor<Team[]>((cb) => b.teams.subscribeMine(cb), (teams) => teams.length === 1)
-    expect(mine.map((team) => team.id)).toEqual([t])
-    const profile = await waitFor<UserProfile | null>((cb) => b.users.subscribeProfile(me.uid, cb))
-    expect(profile).toMatchObject({ teamIds: [t], teamId: t, displayName: 'チームでの名前' })
-    const members = await waitFor<Member[]>((cb) => a.teams.subscribeMembers(t, cb), (m) => m.length === 2)
-    expect(members.find((m) => m.uid === me.uid)?.displayName).toBe('チームでの名前')
-
-    await expect(b.teams.select(t)).resolves.toBeUndefined()
-    await expect(b.teams.select('other-team')).rejects.toThrow('まだ対応していません')
-    const c = await client(),
-      other = await c.teams.create('別のチーム', '別の人')
-    await expect(b.teams.join(await c.teams.getJoinCode(other), '二つ目')).rejects.toThrow('まだ対応していません')
-    await expect(a.teams.remove(t)).rejects.toThrow('まだ対応していません')
-    await expect(b.users.updateDisplayName('other-team', '名前')).rejects.toThrow('まだ対応していません')
-
-    await b.teams.leave(t)
-    expect(await waitFor<Team[]>((cb) => b.teams.subscribeMine(cb), (teams) => teams.length === 0)).toEqual([])
+describe('multi-team security boundaries (#24)', () => {
+  it('rejects forged additions, removals of unrelated teams and team deletion by a member', async () => {
+    const db = dbFor('member')
+    await assertFails(updateDoc(doc(db,'users/member'), {teamIds:['t','invented'],teamId:'invented',membershipChangeTeamId:'invented'}))
+    await assertFails(updateDoc(doc(db,'users/member'), {teamIds:[],teamId:null,membershipChangeTeamId:'t'}))
+    await assertFails(updateDoc(doc(db,'teams/t'), {deletionUid:'member'}))
+    await assertFails(deleteDoc(doc(db,'teams/t')))
+    await assertFails(updateDoc(doc(dbFor('admin'),'users/member'), {displayName:'偽装'}))
+    await assertFails(getDoc(doc(dbFor('other'),'users/member')))
+    await assertFails(updateDoc(doc(db,'users/member'), {teamIds:['t','t']}))
+  })
+  it('locks writes and membership changes after deletion begins; only its initiator can clean up', async () => {
+    const admin = dbFor('admin'), member = dbFor('member')
+    await assertSucceeds(updateDoc(doc(admin,'teams/t'), {deletionUid:'admin'}))
+    await assertFails(updateDoc(doc(admin,'teams/t'), {deletionUid:'member'}))
+    await assertFails(updateDoc(doc(admin,'teams/t'), {name:'変更'}))
+    await assertFails(setDoc(doc(admin,'teams/t/events/new'),eventData()))
+    await assertFails(updateDoc(doc(member,'teams/t/events/e'), {'attendance.member':'late',updatedAt:serverTimestamp()}))
+    await assertFails(deleteDoc(doc(member,'teams/t/equipment/item')))
+    await assertFails(deleteDoc(doc(member,'teams/t/members/member')))
+    await assertFails(deleteDoc(doc(admin,'teams/t')))
+    // 管理者であっても、メンバー削除と所属更新は同一書き込みが必要。
+    await assertFails(deleteDoc(doc(admin,'teams/t/members/member')))
+    await assertSucceeds(deleteDoc(doc(admin,'teams/t/equipment/item')))
   })
 })

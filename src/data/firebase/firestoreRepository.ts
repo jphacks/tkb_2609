@@ -48,12 +48,12 @@ const requiredText = (value: string, max: number) => {
   return text
 }
 const asDate = (value: Timestamp): Date => value?.toDate() ?? new Date()
-// Firebase 版は1人1チーム（複数チーム所属はモックのみ。docs/decisions.md）
+// 旧形式のプロフィールは既存の単一所属を失わずに読み込む。
+const teamIdsFrom = (data: DocumentData): string[] => data.teamIds ?? (data.teamId ? [data.teamId] : [])
 const profileFrom = (s: DocumentSnapshot): UserProfile | null =>
   s.exists()
-    ? { uid: s.id, displayName: s.data().displayName, teamIds: s.data().teamId ? [s.data().teamId] : [], teamId: s.data().teamId }
+    ? { uid: s.id, displayName: s.data().displayName, teamIds: teamIdsFrom(s.data()), teamId: s.data().teamId }
     : null
-const NOT_SUPPORTED = 'Firebase 版では、複数チームへの所属とチームの削除にまだ対応していません。'
 const memberFrom = (s: DocumentSnapshot): Member => ({
   uid: s.id,
   displayName: s.data()!.displayName,
@@ -68,12 +68,15 @@ const teamFrom = (s: DocumentSnapshot): Team | null =>
         createdBy: s.data().createdBy,
         createdAt: asDate(s.data().createdAt),
         settings: s.data().settings,
+        deleting: !!s.data().deletionUid,
+        deletionUid: s.data().deletionUid,
       }
     : null
 const eventFrom = (s: DocumentSnapshot): TeamEvent => {
   const d = s.data()!
   return {
     id: s.id,
+    deleting: !!d.deleting,
     title: d.title,
     typeId: d.typeId,
     startAt: asDate(d.startAt),
@@ -95,6 +98,7 @@ const itemFrom = (s: DocumentSnapshot): EquipmentItem => {
 class ChangedPossession extends Error {}
 
 export function createFirestoreRepository(auth: Auth, db: Firestore): Repository {
+  const deletionJobs = new Map<string, Promise<void>>()
   const errors = new Set<(error: RepositoryError) => void>()
   const report = (e: unknown) => errors.forEach((cb) => cb(repositoryError(e)))
   const safe =
@@ -110,16 +114,6 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
     if (!auth.currentUser) throw new RepositoryError('ログインしてください。')
     return auth.currentUser.uid
   }
-  /**
-   * 参加・作成時の「このチームでの名前」をプロフィールに保存する。
-   * ルールはメンバーの名前とプロフィールの名前の一致を求め、所属と名前を同じ書き込みで変えることを許さないため、先に名前だけを更新する
-   */
-  const saveTeamDisplayName = async (u: string, displayName: string) => {
-    const name = requiredText(displayName, 40),
-      profile = await getDoc(userRef(u))
-    if (profile.data()?.teamId !== null) throw new RepositoryError(NOT_SUPPORTED)
-    if (profile.data()?.displayName !== name) await updateDoc(userRef(u), { displayName: name })
-  }
   const teamRef = (t: string) => doc(db, 'teams', t)
   const memberRef = (t: string, u: string) => doc(db, 'teams', t, 'members', u)
   const eventRef = (t: string, e: string) => doc(db, 'teams', t, 'events', e)
@@ -132,7 +126,8 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
     await runTransaction(db, async (tx) => {
       const ref = userRef(user.uid),
         profile = await tx.get(ref)
-      if (!profile.exists()) tx.set(ref, { displayName: user.displayName || 'メンバー', teamId: null })
+      if (!profile.exists()) tx.set(ref, { displayName: user.displayName || 'メンバー', teamId: null, teamIds: [] })
+      else if (!profile.data().teamIds) tx.update(ref, { teamIds: teamIdsFrom(profile.data()) })
     })
   }
   function watchDoc<T>(ref: ReturnType<typeof doc>, map: (s: DocumentSnapshot) => T, cb: (data: T) => void, empty: T) {
@@ -213,6 +208,7 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
     })
   }
   async function detach(t: string, target: string) {
+    if (target !== uid()) await repository.teams.select(t)
     const [teamBefore, members] = await Promise.all([
       getDoc(teamRef(t)),
       getDocs(collection(db, 'teams', t, 'members')),
@@ -228,7 +224,8 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
     for (const item of items.docs) await changeHolder(t, item.id, target === uid() ? 'release' : 'force')
     await runTransaction(db, async (tx) => {
       const team = await tx.get(teamRef(t)),
-        member = await tx.get(memberRef(t, target))
+        member = await tx.get(memberRef(t, target)),
+        profile = await tx.get(userRef(target))
       if (!member.exists()) throw new RepositoryError('メンバーが見つかりません。')
       if (member.data().heldCount !== 0)
         throw new RepositoryError('用具の状態が変わりました。再取得してやり直してください。')
@@ -238,10 +235,16 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
         tx.update(team.ref, { adminUid: other.id })
       }
       tx.delete(member.ref)
-      tx.update(userRef(target), { teamId: null })
+      const remaining = teamIdsFrom(profile.data()!).filter((id) => id !== t)
+      tx.update(profile.ref, {
+        teamIds: remaining,
+        teamId: profile.data()!.teamId === t ? remaining[0] ?? null : profile.data()!.teamId,
+        membershipChangeTeamId: t,
+      })
     })
   }
   const repository: Repository = {
+    supports: { multipleTeams: true, deleteTeam: true },
     onError(cb) {
       errors.add(cb)
       return () => {
@@ -294,28 +297,17 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
       updateDisplayName: safe(async (teamId, displayName) => {
         const u = uid(),
           name = requiredText(displayName, 40)
-        if ((await getDoc(userRef(u))).data()?.teamId !== teamId) throw new RepositoryError(NOT_SUPPORTED)
+        const t = teamId
+        await requireMember(t)
         for (let attempt = 0; attempt < 4; attempt++) {
-          const profile = await getDoc(userRef(u))
-          const t = profile.data()?.teamId as string | null
-          const items = t
-            ? await getDocs(query(collection(db, 'teams', t, 'equipment'), where('holderUid', '==', u)))
-            : null
+          const items = await getDocs(query(collection(db, 'teams', t, 'equipment'), where('holderUid', '==', u)))
           try {
             await runTransaction(db, async (tx) => {
-              const current = await tx.get(userRef(u))
-              if (current.data()?.teamId !== t) throw new ChangedPossession()
-              const member = t ? await tx.get(memberRef(t, u)) : null
-              const held = await Promise.all((items?.docs ?? []).map((item) => tx.get(item.ref)))
-              if (
-                t &&
-                (!member?.exists() ||
-                  member.data().heldCount !== held.length ||
-                  held.some((item) => !item.exists() || item.data().holderUid !== u))
-              )
-                throw new ChangedPossession()
-              tx.update(current.ref, { displayName: name })
-              if (member) tx.update(member.ref, { displayName: name })
+              const member = await tx.get(memberRef(t, u))
+              const held = await Promise.all(items.docs.map((item) => tx.get(item.ref)))
+              if (!member.exists() || member.data().heldCount !== held.length ||
+                held.some((item) => !item.exists() || item.data().holderUid !== u)) throw new ChangedPossession()
+              tx.update(member.ref, { displayName: name })
               held.forEach((item) => tx.update(item.ref, { holderName: name, updatedAt: serverTimestamp() }))
             })
             return
@@ -327,34 +319,97 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
       }),
     },
     teams: {
-      remove: safe(async () => {
-        throw new RepositoryError(NOT_SUPPORTED)
+      remove: safe(async (t) => {
+        const existing = deletionJobs.get(t)
+        if (existing) return existing
+        const task = (async () => {
+          const actor = uid()
+          await repository.teams.select(t)
+          await runTransaction(db, async (tx) => {
+            const team = await tx.get(teamRef(t))
+            if (!team.exists()) return
+            if (team.data().deletionUid) {
+              if (team.data().deletionUid !== actor) throw new RepositoryError('削除を開始した管理者が再実行してください。')
+            } else tx.update(team.ref, { deletionUid: actor })
+          })
+          // 親の予定を最後まで残し、途中失敗しても notes の走査先を失わない。
+          const clear = async (segments: string[]) => {
+            while (true) {
+              const page = await getDocs(query(collection(db, segments.join('/')), limit(100)))
+              if (page.empty) break
+              const batch = writeBatch(db)
+              page.docs.forEach((entry) => batch.delete(entry.ref))
+              await batch.commit()
+            }
+          }
+          while (true) {
+            const events = await getDocs(query(collection(db, 'teams', t, 'events'), limit(50)))
+            if (events.empty) break
+            for (const event of events.docs) {
+              await clear(['teams', t, 'events', event.id, 'notes'])
+              await deleteDoc(event.ref)
+            }
+          }
+          await clear(['teams', t, 'equipment'])
+          await clear(['teams', t, 'equipmentNames'])
+          const code = await getDoc(privateRef(t))
+          if (code.exists()) {
+            const batch = writeBatch(db)
+            batch.delete(codeRef(code.data().code))
+            batch.delete(code.ref)
+            await batch.commit()
+          }
+          const detachDeleted = async (target: string, final = false) => runTransaction(db, async (tx) => {
+            const profile = await tx.get(userRef(target))
+            if (profile.exists()) {
+              const remaining = teamIdsFrom(profile.data()).filter((id) => id !== t)
+              tx.update(profile.ref, {
+                teamIds: remaining,
+                teamId: profile.data().teamId === t ? remaining[0] ?? null : profile.data().teamId,
+                membershipChangeTeamId: t,
+              })
+            }
+            tx.delete(memberRef(t, target))
+            if (final) tx.delete(teamRef(t))
+          })
+          const members = await getDocs(collection(db, 'teams', t, 'members'))
+          for (const member of members.docs) if (member.id !== actor) await detachDeleted(member.id)
+          // 削除者の所属と親は最後に同時削除し、リロード後も再開できるようにする。
+          await detachDeleted(actor, true)
+        })()
+        deletionJobs.set(t, task)
+        try { await task } finally { deletionJobs.delete(t) }
       }),
       subscribeMine(cb) {
-        // 所属は users/{uid}.teamId の1チームのみ。プロフィールを購読し、所属チームが変わったら張り替える
-        const u = auth.currentUser?.uid
-        if (!u) {
-          cb([])
-          return () => {}
-        }
-        let current: string | null | undefined
-        let offTeam: Unsubscribe | undefined
-        const offProfile = repository.users.subscribeProfile(u, (profile) => {
-          const t = profile?.teamId ?? null
-          if (t === current) return
-          current = t
-          offTeam?.()
-          offTeam = undefined
-          if (!t) return cb([])
-          offTeam = repository.teams.subscribe(t, (team) => cb(team ? [team] : []))
+        const u = uid()
+        let idsKey = ''
+        let stops: Unsubscribe[] = []
+        let generation = 0
+        const off = repository.users.subscribeProfile(u, (profile) => {
+          const ids = profile?.teamIds ?? []
+          const key = JSON.stringify(ids)
+          if (key === idsKey) return
+          idsKey = key
+          const revision = ++generation
+          stops.forEach((stop) => stop())
+          stops = []
+          const teams = new Map<string, Team>()
+          if (!ids.length) cb([])
+          for (const id of ids) stops.push(repository.teams.subscribe(id, (team) => {
+            if (revision !== generation) return
+            if (team) teams.set(id, team)
+            else teams.delete(id)
+            cb(ids.flatMap((id) => teams.get(id) ? [teams.get(id)!] : []))
+          }))
         })
-        return () => {
-          offProfile()
-          offTeam?.()
-        }
+        return () => { ++generation; off(); stops.forEach((stop) => stop()) }
       },
       select: safe(async (t) => {
-        if ((await getDoc(userRef(uid()))).data()?.teamId !== t) throw new RepositoryError(NOT_SUPPORTED)
+        await runTransaction(db, async (tx) => {
+          const profile = await tx.get(userRef(uid()))
+          if (!teamIdsFrom(profile.data()!).includes(t)) throw new RepositoryError('このチームのメンバーではありません。')
+          tx.update(profile.ref, { teamId: t })
+        })
       }),
       subscribeJoinCode(t, cb) {
         return watchDoc(privateRef(t), (s) => (s.exists() ? (s.data().code as string) : null), cb, null)
@@ -363,12 +418,12 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
         const u = uid(),
           nameValue = requiredText(name, 60),
           ref = doc(collection(db, 'teams'))
-        await saveTeamDisplayName(u, displayName)
+        const memberName = requiredText(displayName, 40)
         for (let attempt = 0; attempt < 5; attempt++) {
           const code = generateJoinCode()
           const created = await runTransaction(db, async (tx) => {
             const [profile, existing] = await Promise.all([tx.get(userRef(u)), tx.get(codeRef(code))])
-            if (profile.data()?.teamId !== null) throw new RepositoryError(NOT_SUPPORTED)
+            if (teamIdsFrom(profile.data()!).length >= 20) throw new RepositoryError('所属できるチームは20件までです。')
             if (existing.exists()) return false
             tx.set(ref, {
               name: nameValue,
@@ -384,7 +439,7 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
               },
             })
             tx.set(memberRef(ref.id, u), {
-              displayName: profile.data()!.displayName,
+              displayName: memberName,
               role: 'admin',
               joinedAt: serverTimestamp(),
               joinCode: '',
@@ -393,7 +448,7 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
             })
             tx.set(privateRef(ref.id), { code })
             tx.set(codeRef(code), { teamId: ref.id, createdAt: serverTimestamp() })
-            tx.update(userRef(u), { teamId: ref.id })
+            tx.update(userRef(u), { teamId: ref.id, teamIds: [...teamIdsFrom(profile.data()!), ref.id], membershipChangeTeamId: ref.id })
             return true
           })
           if (created) return ref.id
@@ -406,21 +461,22 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
         if (!/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/.test(code))
           throw new RepositoryError('参加コードを確認してください。')
         if (!(await getDoc(codeRef(code))).exists()) throw new RepositoryError('参加コードが正しくありません。')
-        await saveTeamDisplayName(u, displayName)
+        const memberName = requiredText(displayName, 40)
         return runTransaction(db, async (tx) => {
           const [profile, join] = await Promise.all([tx.get(userRef(u)), tx.get(codeRef(code))])
           if (!join.exists()) throw new RepositoryError('参加コードが正しくありません。')
-          if (profile.data()?.teamId !== null) throw new RepositoryError(NOT_SUPPORTED)
+          if (teamIdsFrom(profile.data()!).length >= 20) throw new RepositoryError('所属できるチームは20件までです。')
           const t = join.data().teamId as string
+          if (teamIdsFrom(profile.data()!).includes(t)) throw new RepositoryError('このチームにはすでに参加しています。')
           tx.set(memberRef(t, u), {
-            displayName: profile.data()!.displayName,
+            displayName: memberName,
             role: 'member',
             joinedAt: serverTimestamp(),
             joinCode: code,
             heldCount: 0,
             equipmentChangeId: '',
           })
-          tx.update(profile.ref, { teamId: t })
+          tx.update(profile.ref, { teamId: t, teamIds: [...teamIdsFrom(profile.data()!), t], membershipChangeTeamId: t })
           return t
         })
       }),
@@ -495,7 +551,7 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
               orderBy('startAt'),
             ),
             eventFrom,
-            cb,
+            (events) => cb(events.filter((event) => !event.deleting)),
           )
           const tomorrow = new Date(today)
           tomorrow.setDate(tomorrow.getDate() + 1)
@@ -531,9 +587,10 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
       }),
       remove: safe(async (t, e) => {
         await ensureEditor(t)
-        // Remove from the schedule first. New notes are denied once the parent is gone.
-        // Cleanup is idempotent and can resume after a connection interruption.
-        await deleteDoc(eventRef(t, e))
+        // 清掃先を失わないよう親を残して非表示・書き込み停止にする。
+        // 旧版で親だけ削除済みの場合も、同じIDでメモ清掃を再実行できる。
+        const event = await getDoc(eventRef(t, e))
+        if (event.exists()) await updateDoc(event.ref, { deleting: true, updatedAt: serverTimestamp() })
         while (true) {
           const notes = await getDocs(query(collection(db, 'teams', t, 'events', e, 'notes'), limit(450)))
           if (notes.empty) break
@@ -541,6 +598,7 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
           notes.docs.forEach((n) => batch.delete(n.ref))
           await batch.commit()
         }
+        await deleteDoc(eventRef(t, e))
       }),
       setAttendance: safe(async (t, e, status) => {
         if (!['present', 'absent', 'observe', 'late', 'leave_early'].includes(status))
