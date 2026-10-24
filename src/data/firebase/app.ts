@@ -24,6 +24,12 @@ const EMULATOR_PROJECT_ID = 'demo-bukatsu'
 
 const env = import.meta.env
 
+// Firebase Hosting（*.web.app / *.firebaseapp.com）で配信しているときは、開いているサイトのドメインでログイン処理を行う。
+// Google のログイン画面に、利用者が開いているのと同じアドレス（bukatsu20261024.web.app）が表示され、
+// iPhone の Safari でもログイン処理が同じサイトの中で完結する。localhost などで本番に接続するときは .env.local の値を使う。
+// 新しいドメインで配信する場合は、Google Cloud の OAuth クライアントに https://<ドメイン>/__/auth/handler を追加する
+const hostingAuthDomain = /\.(web\.app|firebaseapp\.com)$/.test(location.hostname) ? location.hostname : undefined
+
 const config: FirebaseOptions = useEmulator
   ? {
       apiKey: env.VITE_FIREBASE_API_KEY || 'demo-api-key',
@@ -33,7 +39,7 @@ const config: FirebaseOptions = useEmulator
     }
   : {
       apiKey: env.VITE_FIREBASE_API_KEY,
-      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+      authDomain: hostingAuthDomain || env.VITE_FIREBASE_AUTH_DOMAIN,
       projectId: env.VITE_FIREBASE_PROJECT_ID,
       storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
       messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
