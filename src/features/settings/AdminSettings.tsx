@@ -35,7 +35,7 @@ function JoinCodeSection() {
   const [manualCopy, setManualCopy] = useState(false)
 
   const appUrl = `${location.origin}/?openExternalBrowser=1`
-  const shareText = `「${team.name}」の Bukatsu に参加してください。\n参加コード：${code}\n${appUrl}`
+  const shareText = `「${team.name}」の BUKATSU に参加してください。\n参加コード：${code}\n${appUrl}`
 
   const reveal = () => setRevealed(true)
 
