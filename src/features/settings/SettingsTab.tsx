@@ -116,7 +116,10 @@ export function SettingsTab() {
             <button className="btn btn-secondary btn-block" onClick={navigation.add}>
               チームを追加
             </button>
-            <p className="hint">参加コードで別のチームに参加するか、新しいチームを作ります。所属するチームは画面上部で切り替えられます。</p>
+            <p className="hint">
+              参加コードで別のチームに参加するか、新しいチームを作ります。
+              {navigation.teams.length > 1 && '所属するチームは画面上部のチーム名から切り替えられます。'}
+            </p>
           </div>
         </section>
       )}

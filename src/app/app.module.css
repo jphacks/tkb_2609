@@ -116,36 +116,59 @@
 }
 
 /* ヘッダー左側のチームの選択欄（#59）。見た目はチーム名の見出しにそろえ、右に開閉の印を付ける */
-/* 幅はチーム名に合わせ（開閉の印を名前のすぐ右に置く）、再取得ボタンは右端に寄せる */
+/* 幅は見えているチーム名に合わせ（開閉の印を名前のすぐ右に置く）、再取得ボタンは右端に寄せる。
+   選択欄は透明にして全体に重ね、どこを押しても開けるようにする */
 .teamSelect {
   position: relative;
   display: flex;
   flex: 0 1 auto;
   align-items: center;
+  gap: 4px;
   min-width: 0;
+  min-height: 44px;
   margin-right: auto;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
 }
 
-.teamSelect select {
-  max-width: 100%;
+.teamSelect:has(select:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.teamSelectName {
   min-width: 0;
-  field-sizing: content;
-  min-height: 44px;
-  padding: 0 28px 0 0;
-  border: none;
-  background: transparent;
-  color: var(--text);
+  overflow: hidden;
   font-size: 17px;
   font-weight: 700;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teamSelect svg {
+  flex-shrink: 0;
+  color: var(--text-sub);
+}
+
+.teamSelect select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* 16px 未満だと iOS が選択時にズームする */
+  font-size: 16px;
+  opacity: 0;
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
 }
 
-.teamSelect svg {
-  position: absolute;
-  right: 4px;
-  color: var(--text-sub);
-  pointer-events: none;
+/* 読み込めない画面・削除中の画面での、ほかのチームへの切り替え・追加 */
+.teamRecovery {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }

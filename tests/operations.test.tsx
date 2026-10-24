@@ -546,11 +546,45 @@ describe('team switching in the header (#59)', () => {
     // 再取得ボタンは選択欄と同じ段の右端に残る
     expect(within(screen.getByRole('banner')).getByRole('button', { name: '最新の情報に更新' })).toBeTruthy()
 
-    // チームの追加は設定タブから
+    // チームの追加は設定タブから。2チーム以上なら、切り替えの案内も出す
     await user.click(screen.getByRole('button', { name: '設定' }))
     await user.click(await screen.findByRole('button', { name: 'チームを追加' }))
     expect(await screen.findByRole('heading', { name: /さん、ようこそ/ })).toBeTruthy()
+    // 「戻る」で、開いていた設定タブに戻る
     await user.click(screen.getByRole('button', { name: '戻る' }))
-    expect(await screen.findByRole('banner')).toBeTruthy()
+    expect((await screen.findByRole('button', { name: '設定' })).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByText(/画面上部のチーム名から切り替えられます/)).toBeTruthy()
+  })
+  it('does not offer switching in settings or the header when the list lacks the current team', async () => {
+    const h = harness()
+    await h.repo.auth.signIn('admin@example.com', 'Bukatsu#2026')
+    // 参加・作成の直後で、所属の一覧の読み込みが表示中のチームに追いついていない状態
+    vi.spyOn(h.repo.teams, 'subscribeMine').mockImplementation((cb) => {
+      cb([
+        { id: 'other-1', name: '別チーム1' },
+        { id: 'other-2', name: '別チーム2' },
+      ] as never)
+      return () => {}
+    })
+    render(<App />, { wrapper: h.wrapper })
+    const header = await screen.findByRole('banner')
+    expect(await within(header).findByRole('heading', { name: 'サンプルチーム' })).toBeTruthy()
+    expect(within(header).queryByRole('combobox')).toBeNull()
+  })
+  it('lets users switch or add teams from the screen shown when the team cannot be loaded', async () => {
+    const h = harness()
+    const user = userEvent.setup()
+    await h.repo.auth.signIn('admin@example.com', 'Bukatsu#2026')
+    await h.repo.teams.create('第二チーム', '山田')
+    const realMembers = h.repo.teams.subscribeMembers.bind(h.repo.teams)
+    // 表示中のチームのメンバーを読み込めない（自分が含まれない）と、読み込めない画面になる
+    vi.spyOn(h.repo.teams, 'subscribeMembers').mockImplementation((teamId, cb) =>
+      teamId === 'team-sample' ? realMembers(teamId, cb) : (cb([]), () => {}),
+    )
+    render(<App />, { wrapper: h.wrapper })
+    expect(await screen.findByRole('heading', { name: 'データを読み込めませんでした' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'チームを追加' })).toBeTruthy()
+    await user.selectOptions(screen.getByRole('combobox', { name: '表示するチーム' }), 'サンプルチーム')
+    expect(await within(await screen.findByRole('banner')).findByRole('combobox', { name: '表示するチーム' })).toBeTruthy()
   })
 })
