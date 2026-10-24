@@ -121,5 +121,5 @@ HTML は再検証し、ハッシュ付きの `/assets/` は長期キャッシュ
 - 配信確認：公開された全8ファイルがローカルの `dist/` とバイト単位で一致し、HTTP 200 を返す。共有 URL・SPA パスは `index.html` と一致。HTML の再検証とハッシュ付きアセットの長期キャッシュも確認済み。
 - 検証：lint、テストの型チェック、本番ビルド、既存テスト60件が成功。既存の開発エミュレータが使用中だったため、テストは一時コピーで接続先ポートのみ変更し、専用エミュレータ（Auth 19099／Firestore 18080）で実施した。
 - Authentication：`bukatsu20261024.web.app` は承認済みドメインに含まれる。
-- **未完了：本番 Firestore はまだ全読み書きを拒否する初期ルール。** main のルール反映は自動承認レビューで「Hosting の依頼ではアクセス権限の変更まで承認されていない」と拒否され、実施していない。データを使う機能の利用には明示的な承認後のルール反映が必要。検証後に実行するコマンドは `npx firebase deploy --only firestore:rules --project prod`。
+- Firestore：ユーザーの明示的な承認後、`npx firebase deploy --only firestore:rules --project prod` で main の検証済みルールを公開した。Firebase 側のコンパイルが成功し、公開後のルールを管理 API で読み戻して main と完全一致することを確認した。チームの権限に沿った読み書きが有効。インデックスやデータの変更は行っていない。
 - iPhone Safari・LINE 内ブラウザ・ショートカット経由の実機操作は未確認。

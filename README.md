@@ -4,7 +4,7 @@
 
 [Bukatsu（Firebase Hosting）](https://bukatsu20261024.web.app/?openExternalBrowser=1)
 
-現在は Hosting のみ公開済み。Firestore ルールの反映待ちのため、データを使う機能はまだ利用できない。
+Hosting と main の Firestore セキュリティルールを公開済み。iPhone 実機での動作確認は未実施。
 
 LINE などで共有するときは、`https://bukatsu20261024.web.app/?openExternalBrowser=1` を使う。
 `?openExternalBrowser=1` は LINE から外部ブラウザで開くための指定。端末の設定などで
