@@ -34,6 +34,8 @@ export interface Repository {
     updateDisplayName(teamId: string, displayName: string): Promise<void>
   }
   teams: {
+    /** 管理者のみ。チーム全体と参加コードを削除し、全員の所属から外す */
+    remove(teamId: string): Promise<void>
     subscribeMine(cb: (teams: Team[]) => void): Unsubscribe
     select(teamId: string): Promise<void>
     /** チームを作り、作成者を管理者として登録する。戻り値は teamId */

@@ -282,6 +282,20 @@ export function createMockRepository(): Repository & { reset(): void } {
     },
 
     teams: {
+      async remove(teamId) {
+        await sleep(LATENCY_MS)
+        requireAdmin(teamId)
+        // 選択中のチームは各ユーザーの残りの所属へ切り替える。
+        for (const user of Object.values(db.users)) {
+          user.teamIds = user.teamIds.filter((id) => id !== teamId)
+          if (user.teamId === teamId) user.teamId = user.teamIds[0] ?? null
+        }
+        for (const [code, id] of Object.entries(db.joinCodes)) {
+          if (id === teamId) delete db.joinCodes[code]
+        }
+        delete db.teams[teamId]
+        commit()
+      },
       subscribeMine(cb) {
         return watch(() => {
           const uid = requireUid()

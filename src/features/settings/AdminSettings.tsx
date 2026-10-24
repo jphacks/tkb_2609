@@ -1,9 +1,10 @@
-import { useState, type CSSProperties } from 'react'
+import { useRef, useState, type CSSProperties } from 'react'
 import { useRepository, useSession } from '../../app/contexts'
 import { useFeedback } from '../../components/feedback/context'
 import { CopyIcon, PlusIcon, TrashIcon } from '../../components/icons'
 import type { EventEditPolicy, EventType } from '../../types'
 import styles from './settings.module.css'
+import { copyText } from '../../lib/clipboard'
 
 const TYPE_COLORS = ['#2563eb', '#e8590c', '#12a150', '#7c5cdb', '#d6336c', '#0e9aa7', '#6b7280']
 
@@ -14,6 +15,7 @@ export function AdminSettings() {
       <JoinCodeSection />
       <EditPolicySection />
       <EventTypesSection />
+      <DeleteTeamSection />
     </>
   )
 }
@@ -22,6 +24,8 @@ function JoinCodeSection() {
   const repo = useRepository()
   const { team } = useSession()
   const { run, confirm, toast } = useFeedback()
+  const codeInput = useRef<HTMLInputElement>(null)
+  const [manualCopy, setManualCopy] = useState(false)
   const [code, setCode] = useState<string | null>(null)
 
   const appUrl = `${location.origin}/?openExternalBrowser=1`
@@ -30,11 +34,15 @@ function JoinCodeSection() {
   const reveal = () => run(async () => setCode(await repo.teams.getJoinCode(team.id)))
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(code ?? '')
+    if (!code) return
+    if (await copyText(code)) {
+      setManualCopy(false)
       toast('参加コードをコピーしました')
-    } catch {
-      toast('コピーできませんでした')
+    } else {
+      setManualCopy(true)
+      codeInput.current?.focus()
+      codeInput.current?.select()
+      toast('コードを選択しました。長押し、または Ctrl/Cmd+C でコピーしてください')
     }
   }
 
@@ -59,11 +67,13 @@ function JoinCodeSection() {
         ) : (
           <>
             <div className={styles.codeRow}>
-              <span className={styles.code}>{code}</span>
+              <input ref={codeInput} className={styles.code} value={code} readOnly
+                aria-label="参加コード" onFocus={(e) => e.currentTarget.select()} />
               <button className="icon-btn" onClick={copy} aria-label="参加コードをコピー">
                 <CopyIcon size={20} />
               </button>
             </div>
+            {manualCopy && <p className="hint">自動コピーが許可されていません。コードを長押しして「コピー」、または Ctrl/Cmd+C でコピーしてください。</p>}
             <a
               className={`btn btn-block ${styles.lineButton}`}
               href={`https://line.me/R/share?text=${encodeURIComponent(shareText)}`}
@@ -182,6 +192,34 @@ function EventTypesSection() {
           </button>
         </div>
       </div>
+    </section>
+  )
+}
+
+function DeleteTeamSection() {
+  const repo = useRepository()
+  const { team } = useSession()
+  const { confirm, run } = useFeedback()
+  const [busy, setBusy] = useState(false)
+
+  const remove = async () => {
+    if (busy) return
+    setBusy(true)
+    const ok = await confirm({
+      title: `「${team.name}」を削除しますか？`,
+      message: 'チームの予定・出欠・メモ・用具・メンバー情報をすべて削除します。全メンバーがこのチームから外れ、参加コードも無効になります。元に戻せません。他のチームやアカウントは残ります。',
+      confirmLabel: 'チームを削除する',
+      danger: true,
+    })
+    if (ok) await run(() => repo.teams.remove(team.id), 'チームを削除しました')
+    setBusy(false)
+  }
+
+  return (
+    <section className={styles.section}>
+      <h2 className="section-title">チームの削除（管理者）</h2>
+      <p className="hint">全メンバーのチームデータを削除します。この操作は元に戻せません。</p>
+      <button className="btn btn-danger btn-block" disabled={busy} onClick={remove}>チームを削除</button>
     </section>
   )
 }
