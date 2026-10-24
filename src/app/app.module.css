@@ -114,3 +114,15 @@
     transform: scale(0.94);
   }
 }
+
+.teamSwitcher {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  max-width: var(--app-max-w);
+  margin: 0 auto;
+  padding: calc(12px + var(--safe-top)) 16px 12px;
+}
+.teamSwitcher label { flex: 1; min-width: 0; }
+.teamSwitcher select { width: 100%; min-height: 44px; }
+.teamSwitcher button { min-height: 44px; flex-shrink: 0; }

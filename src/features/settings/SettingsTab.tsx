@@ -44,9 +44,9 @@ export function SettingsTab() {
         <div className={`card ${styles.group}`}>
           <NameForm
             id="display-name"
-            label="名前"
+            label="このチームでの名前"
             initial={me.displayName}
-            onSave={(name) => run(() => repo.users.updateDisplayName(name), '名前を変更しました')}
+            onSave={(name) => run(() => repo.users.updateDisplayName(team.id, name), '名前を変更しました')}
           />
           <div className={styles.item}>
             <span className={styles.itemLabel}>メールアドレス</span>

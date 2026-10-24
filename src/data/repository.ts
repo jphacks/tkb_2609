@@ -30,14 +30,16 @@ export interface Repository {
   }
   users: {
     subscribeProfile(uid: string, cb: (profile: UserProfile | null) => void): Unsubscribe
-    /** users・members の表示名と、自分が持っている用具の holderName をまとめて更新 */
-    updateDisplayName(displayName: string): Promise<void>
+    /** 対象チームの members の表示名と、自分が持っている用具の holderName を更新 */
+    updateDisplayName(teamId: string, displayName: string): Promise<void>
   }
   teams: {
+    subscribeMine(cb: (teams: Team[]) => void): Unsubscribe
+    select(teamId: string): Promise<void>
     /** チームを作り、作成者を管理者として登録する。戻り値は teamId */
-    create(name: string): Promise<string>
+    create(name: string, displayName: string): Promise<string>
     /** 参加コードでチームに参加する。戻り値は teamId */
-    join(code: string): Promise<string>
+    join(code: string, displayName: string): Promise<string>
     subscribe(teamId: string, cb: (team: Team | null) => void): Unsubscribe
     subscribeMembers(teamId: string, cb: (members: Member[]) => void): Unsubscribe
     /** 管理者のみ */
