@@ -3,6 +3,7 @@ import { useRepository } from '../../app/contexts'
 import { CheckIcon } from '../../components/icons'
 import { RepositoryError } from '../../data/repository'
 import { PASSWORD_RULES, isStrongPassword } from '../../lib/password'
+import { PasswordInput } from '../../components/PasswordInput'
 import styles from './auth.module.css'
 import { GoogleSignIn } from './GoogleSignIn'
 
@@ -60,17 +61,7 @@ export function SignUpScreen({ onLogin }: { onLogin(): void }) {
             onChange={(e) => setEmail(e.target.value)}
           />
         </label>
-        <label className="field">
-          <span className="label">パスワード</span>
-          <input
-            className="input"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
+        <PasswordInput label="パスワード" autoComplete="new-password" value={password} onChange={setPassword} />
 
         <ul className={styles.rules} aria-label="パスワードの条件">
           {PASSWORD_RULES.map((rule) => {

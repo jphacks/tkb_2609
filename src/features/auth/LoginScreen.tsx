@@ -4,6 +4,7 @@ import { useFeedback } from '../../components/feedback/context'
 import { isMock } from '../../data'
 import { MOCK_ACCOUNTS, MOCK_PASSWORD } from '../../data/mock/seed'
 import { RepositoryError } from '../../data/repository'
+import { PasswordInput } from '../../components/PasswordInput'
 import styles from './auth.module.css'
 import { GoogleSignIn } from './GoogleSignIn'
 
@@ -57,17 +58,7 @@ export function LoginScreen({ onSignUp }: { onSignUp(): void }) {
             onChange={(e) => setEmail(e.target.value)}
           />
         </label>
-        <label className="field">
-          <span className="label">パスワード</span>
-          <input
-            className="input"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
+        <PasswordInput label="パスワード" autoComplete="current-password" value={password} onChange={setPassword} />
         {error && <p className="error-text">{error}</p>}
         <button className="btn btn-primary btn-block" disabled={busy}>
           {busy ? 'ログイン中…' : 'ログイン'}
