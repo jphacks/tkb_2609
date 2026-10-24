@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useRepository, useSession } from '../../app/contexts'
 import { useFeedback } from '../../components/feedback/context'
 import { isMock, resetMockData } from '../../data'
-import { AdminSettings } from './AdminSettings'
+import { AdminSettings, DeleteTeamSection } from './AdminSettings'
 import { MemberList } from './MemberList'
 import styles from './settings.module.css'
 
@@ -44,9 +44,9 @@ export function SettingsTab() {
         <div className={`card ${styles.group}`}>
           <NameForm
             id="display-name"
-            label="名前"
+            label="このチームでの名前"
             initial={me.displayName}
-            onSave={(name) => run(() => repo.users.updateDisplayName(name), '名前を変更しました')}
+            onSave={(name) => run(() => repo.users.updateDisplayName(team.id, name), '名前を変更しました')}
           />
           <div className={styles.item}>
             <span className={styles.itemLabel}>メールアドレス</span>
@@ -93,6 +93,20 @@ export function SettingsTab() {
 
       <MemberList />
 
+      {isMock && (
+        <section className={styles.mockBox}>
+          <p className={styles.mockTitle}>モック用</p>
+          <p className="hint">
+            別のタブで別のアカウントにログインすると、変更がリアルタイムに反映される様子を確認できます。
+          </p>
+          <button className={`btn btn-secondary btn-sm ${styles.danger}`} onClick={resetMock}>
+            データを初期状態に戻す
+          </button>
+        </section>
+      )}
+
+      {isAdmin && repo.supports?.deleteTeam && <DeleteTeamSection />}
+
       <section className={styles.section}>
         <h2 className="section-title">アカウント</h2>
         <div className={styles.accountActions}>
@@ -110,17 +124,7 @@ export function SettingsTab() {
         </div>
       </section>
 
-      {isMock && (
-        <section className={styles.mockBox}>
-          <p className={styles.mockTitle}>モック用</p>
-          <p className="hint">
-            別のタブで別のアカウントにログインすると、変更がリアルタイムに反映される様子を確認できます。
-          </p>
-          <button className={`btn btn-secondary btn-sm ${styles.danger}`} onClick={resetMock}>
-            データを初期状態に戻す
-          </button>
-        </section>
-      )}
+
     </div>
   )
 }

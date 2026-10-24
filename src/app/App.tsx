@@ -5,6 +5,8 @@ import { TeamEntryScreen } from '../features/auth/TeamEntryScreen'
 import type { AuthUser, Member, Team, UserProfile } from '../types'
 import { SessionContext, useRefresh, useRepository, type Session } from './contexts'
 import { MainShell } from './MainShell'
+import { useFeedback } from '../components/feedback/context'
+import styles from './app.module.css'
 import { Splash } from './Splash'
 import { useSubscription } from './useSubscription'
 
@@ -31,11 +33,26 @@ function SignedIn({ user }: { user: AuthUser }) {
   const repo = useRepository()
   const profile = useSubscription<UserProfile | null>((cb) => repo.users.subscribeProfile(user.uid, cb), [user.uid])
 
-  if (profile === undefined) return <Splash />
+  const teams = useSubscription<Team[]>((cb) => repo.teams.subscribeMine(cb), [user.uid])
+  const [adding, setAdding] = useState(false)
+  const { run } = useFeedback()
+  if (profile === undefined || teams === undefined) return <Splash />
   if (profile === null) return <ConnectionIssue />
   // 2回目以降のログインでは teamId がわかるので、参加コードの入力は不要
-  if (!profile.teamId) return <TeamEntryScreen profile={profile} />
-  return <TeamSession key={profile.teamId} user={user} profile={profile} teamId={profile.teamId} />
+  if (!profile.teamId || adding) return <TeamEntryScreen profile={profile} onDone={profile.teamId ? () => setAdding(false) : undefined} />
+  // チームの切り替え・追加は、複数チーム所属に対応した実装（現在はモック）でのみ表示する
+  return <>
+    {repo.supports?.multipleTeams && <div className={styles.teamSwitcher}>
+      <label className="field">
+        <span className="label">表示するチーム</span>
+        <select className="input" value={profile.teamId} onChange={(e) => run(() => repo.teams.select(e.target.value))}>
+          {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+        </select>
+      </label>
+      <button className="btn btn-secondary" onClick={() => setAdding(true)}>チームを追加</button>
+    </div>}
+    <TeamSession key={profile.teamId} user={user} profile={profile} teamId={profile.teamId} />
+  </>
 }
 
 function TeamSession({ user, profile, teamId }: { user: AuthUser; profile: UserProfile; teamId: string }) {

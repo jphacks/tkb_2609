@@ -21,7 +21,7 @@ const baseSession = (): Session => {
   const me = { uid: 'admin', displayName: '管理者', role: 'admin' as const, joinedAt: new Date() }
   return {
     user: { uid: 'admin', email: 'admin@example.invalid' },
-    profile: { uid: 'admin', displayName: '管理者', teamId: 'team' },
+    profile: { uid: 'admin', displayName: '管理者', teamIds: ['team'], teamId: 'team' },
     team: {
       id: 'team',
       name: 'テストチーム',
@@ -191,7 +191,8 @@ describe('settings UI', () => {
     await user.click(screen.getByRole('button', { name: '参加コードを表示' }))
     expect(codes.count()).toBe(1)
     codes.emit('K7MPX2QA')
-    expect(screen.getByText('K7MPX2QA')).toBeTruthy()
+    // 長押しで手動コピーできるよう、コードは読み取り専用の入力欄に表示する（PR #21）
+    expect((screen.getByLabelText('参加コード') as HTMLInputElement).value).toBe('K7MPX2QA')
     const link = screen.getByRole('link', { name: 'LINE で共有' }).getAttribute('href')!
     expect(decodeURIComponent(link)).toContain('K7MPX2QA')
     expect(decodeURIComponent(link)).toContain('openExternalBrowser=1')
@@ -204,7 +205,7 @@ describe('settings UI', () => {
     h.update({ ...h.session(), isAdmin: false, me: { ...h.session().me, role: 'member' } })
     view.rerender(<SettingsTab />)
     expect(codes.count()).toBe(0)
-    expect(screen.queryByText('K7MPX2QA')).toBeNull()
+    expect(screen.queryByLabelText('参加コード')).toBeNull()
   })
   it('applies remote event types when clean but preserves dirty drafts until explicitly reloaded', async () => {
     const h = harness(),
@@ -260,11 +261,11 @@ describe('settings UI', () => {
     h.repo.users.updateDisplayName = vi.fn(async () => {})
     h.repo.auth.signOut = vi.fn(async () => {})
     const view = render(<SettingsTab />, { wrapper: h.wrapper })
-    const input = screen.getByLabelText('名前')
+    const input = screen.getByLabelText('このチームでの名前')
     await user.clear(input)
     await user.type(input, '新しい名前')
     await user.click(within(input.closest('form')!).getByRole('button', { name: '保存' }))
-    expect(h.repo.users.updateDisplayName).toHaveBeenCalledWith('新しい名前')
+    expect(h.repo.users.updateDisplayName).toHaveBeenCalledWith('team', '新しい名前')
     h.update({ ...h.session(), me: { ...h.session().me, displayName: '新しい名前' } })
     view.rerender(<SettingsTab />)
     expect(within(input.closest('form')!).queryByRole('button', { name: '保存' })).toBeNull()
