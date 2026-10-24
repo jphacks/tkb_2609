@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// Firestore セキュリティルール。
+// 方針は docs/data-model.md の「セキュリティルールの方針」を参照。本実装は Issue #7 で行う。
+// それまでは安全側に倒し、すべての読み書きを拒否する。
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
