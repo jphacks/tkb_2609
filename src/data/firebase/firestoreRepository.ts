@@ -469,11 +469,11 @@ export function createFirestoreRepository(
         return () => { ++generation; off(); stops.forEach((stop) => stop()) }
       },
       select: safe(async (t) => {
-        await runTransaction(db, async (tx) => {
-          const profile = await tx.get(userRef(uid()))
-          if (!teamIdsFrom(profile.data()!).includes(t)) throw new RepositoryError('このチームのメンバーではありません。')
-          tx.update(profile.ref, { teamId: t })
-        })
+        // トランザクションは使わない。トランザクションの書き込みは端末内に先に反映されず、プロフィールの購読に届くまで
+        // サーバーからの通知を待つため、表示するチームの切り替えが画面に出るのが遅れることがある。
+        // 通常の更新なら購読へすぐに反映される。所属していないチームへの切り替えはセキュリティルールが拒否し、
+        // そのときは端末内の変更も取り消される（所属と、チームのメンバーであることをルールで確認している）
+        await updateDoc(userRef(uid()), { teamId: t })
       }),
       subscribeJoinCode(t, cb) {
         return onSnapshot(
