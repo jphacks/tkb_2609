@@ -1,0 +1,116 @@
+.shell {
+  max-width: var(--app-max-w);
+  min-height: 100dvh;
+  margin: 0 auto;
+  background: var(--bg);
+}
+
+.content {
+  padding: 12px 16px calc(var(--tabbar-h) + var(--safe-bottom) + 24px);
+}
+
+.tabbar {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 100%;
+  max-width: var(--app-max-w);
+  height: calc(var(--tabbar-h) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
+  border-top: 1px solid var(--border);
+  background: rgb(255 255 255 / 94%);
+  backdrop-filter: blur(12px);
+  transform: translateX(-50%);
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tab[aria-current='page'] {
+  color: var(--accent);
+}
+
+/* 幅の広い画面とスマホ横向き：タブバーを左側のレールにする */
+@media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
+  .shell {
+    display: grid;
+    grid-template-areas:
+      'nav header'
+      'nav main';
+    grid-template-columns: calc(var(--rail-w) + env(safe-area-inset-left, 0px)) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+
+  .headerArea {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    grid-area: header;
+    align-self: start;
+  }
+
+  .content {
+    grid-area: main;
+    padding: 16px max(20px, env(safe-area-inset-right, 0px)) calc(32px + var(--safe-bottom)) 20px;
+  }
+
+  .tabbar {
+    position: sticky;
+    top: 0;
+    left: auto;
+    bottom: auto;
+    grid-area: nav;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: auto;
+    max-width: none;
+    height: 100dvh;
+    padding: calc(12px + var(--safe-top)) 0 var(--safe-bottom) env(safe-area-inset-left, 0px);
+    border-top: none;
+    border-right: 1px solid var(--border);
+    transform: none;
+  }
+
+  .tab {
+    min-height: 64px;
+  }
+}
+
+.splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 100dvh;
+}
+
+.splash img {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.splashName {
+  font-weight: 700;
+  color: var(--text-sub);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+    transform: scale(0.94);
+  }
+}
