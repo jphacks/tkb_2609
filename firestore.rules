@@ -6,9 +6,10 @@ service cloud.firestore {
     function memberPath(t, u) { return /databases/$(database)/documents/teams/$(t)/members/$(u); }
     function teamPath(t) { return /databases/$(database)/documents/teams/$(t); }
     function userPath(u) { return /databases/$(database)/documents/users/$(u); }
-    function deleting(t) { return get(teamPath(t)).data.get('deletionUid', null) != null; }
     function cleanup(t) { return signedIn() && get(teamPath(t)).data.get('deletionUid', null) == me(); }
-    function member(t) { return signedIn() && exists(memberPath(t, me())) && !deleting(t); }
+    // 削除中（deletionUid あり）でも、既存メンバーは最後に所属が外されるまで通常どおり使える。
+    // 削除中に止めるのは新規参加と参加コードの発行のみ（members・joinCodes・private/joinCode の各ルール）
+    function member(t) { return signedIn() && exists(memberPath(t, me())); }
     function readable(t) { return signedIn() && (exists(memberPath(t, me())) || cleanup(t)); }
     function ids(d) { return d.get('teamIds', d.teamId == null ? [] : [d.teamId]); }
     function validIds(d) { return ids(d) is list && ids(d).size() <= 20

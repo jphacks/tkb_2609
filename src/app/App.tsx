@@ -76,7 +76,8 @@ function TeamSession({ user, profile, teamId }: { user: AuthUser; profile: UserP
   }, [user, profile, team, members])
 
   if (team === undefined || members === undefined) return <Splash />
-  if (team?.deleting) return <TeamDeletion teamId={teamId} canResume={team.deletionUid === user.uid} />
+  // 削除中の画面は削除を始めた管理者だけに出す。ほかのメンバーは、削除が完了して所属が外れるまで通常どおり使える
+  if (team?.deleting && team.deletionUid === user.uid) return <TeamDeletion teamId={teamId} />
   if (!session) return <ConnectionIssue />
   return (
     <SessionContext.Provider value={session}>
@@ -107,19 +108,21 @@ function ConnectionIssue() {
   )
 }
 
-function TeamDeletion({ teamId, canResume }: { teamId: string; canResume: boolean }) {
+function TeamDeletion({ teamId }: { teamId: string }) {
   const repo = useRepository()
   const { run } = useFeedback()
+  const { refresh } = useRefresh()
   const [busy, setBusy] = useState(false)
   return (
     <main className="card" style={{ margin: 24, padding: 24 }}>
       <h1>チームを削除中です</h1>
-      <p>削除を開始した管理者は、通信状態を確認して削除を再開できます。他のチームには影響しません。</p>
-      {canResume && <button className="btn btn-danger" disabled={busy} onClick={async () => {
+      <p>削除の途中で止まっています。通信状態を確認して、削除を再開してください。完了するまで、ほかのメンバーはこのチームを通常どおり使えます。他のチームには影響しません。</p>
+      <button className="btn btn-danger" disabled={busy} onClick={async () => {
         setBusy(true)
-        await run(() => repo.teams.remove(teamId), 'チームを削除しました')
+        // 削除後は購読を張り直す（削除前から開いていたプロフィールの購読が、所属の更新を受け取らないことがあるため）
+        if (await run(() => repo.teams.remove(teamId), 'チームを削除しました')) refresh()
         setBusy(false)
-      }}>削除を再開</button>}
+      }}>削除を再開</button>
       <button className="btn btn-secondary" onClick={() => run(() => repo.auth.signOut())}>ログアウト</button>
     </main>
   )

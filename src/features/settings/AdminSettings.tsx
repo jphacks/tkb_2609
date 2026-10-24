@@ -1,6 +1,6 @@
 import { useRef, useState, type CSSProperties } from 'react'
 import { eventTypesError } from '../../lib/eventTypes'
-import { useRepository, useSession } from '../../app/contexts'
+import { useRefresh, useRepository, useSession } from '../../app/contexts'
 import { useSubscription } from '../../app/useSubscription'
 import { useFeedback } from '../../components/feedback/context'
 import { CopyIcon, PlusIcon, TrashIcon } from '../../components/icons'
@@ -234,6 +234,7 @@ export function DeleteTeamSection() {
   const repo = useRepository()
   const { team } = useSession()
   const { confirm, run } = useFeedback()
+  const { refresh } = useRefresh()
   const [busy, setBusy] = useState(false)
 
   const remove = async () => {
@@ -245,7 +246,8 @@ export function DeleteTeamSection() {
       confirmLabel: 'チームを削除する',
       danger: true,
     })
-    if (ok) await run(() => repo.teams.remove(team.id), 'チームを削除しました')
+    // 削除後は購読を張り直す（削除前から開いていたプロフィールの購読が、所属の更新を受け取らないことがあるため）
+    if (ok && (await run(() => repo.teams.remove(team.id), 'チームを削除しました'))) refresh()
     setBusy(false)
   }
 

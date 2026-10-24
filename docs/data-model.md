@@ -20,7 +20,7 @@ teams/{teamId}
   createdBy: uid
   createdAt: Timestamp
   adminUid: uid                       … 管理者が最低1人残ることを検証する参照先
-  deletionUid?: uid                    … 削除開始者。存在すると通常の変更を停止
+  deletionUid?: uid                    … 削除開始者。存在すると新規参加・参加コード発行を停止（既存メンバーは通常どおり使える）
   settings:
     eventEditPolicy: "admins" | "all"
     eventTypes: [{ id: string, label: string, color: string }]

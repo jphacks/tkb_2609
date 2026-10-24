@@ -681,8 +681,9 @@ describe('Firebase multiple-team membership (#24)', () => {
         {authorUid:ub.uid,authorName:'メンバー',body:'メモ',createdAt:now()})
       await batch.commit()
     })
-    await expect(b.events.addNote(t,e,'停止後のメモ')).rejects.toThrow()
-    await expect(b.equipment.add(t,{name:'停止後の用具'})).rejects.toThrow()
+    // 削除中でも既存メンバーは通常どおり使える。新規参加だけは止める
+    await expect(b.events.addNote(t,e,'削除中のメモ')).resolves.toBeUndefined()
+    await expect(b.equipment.add(t,{name:'削除中の用具'})).resolves.toBeTypeOf('string')
     const newcomer = await client()
     await expect(newcomer.teams.join(code,'削除中への参加')).rejects.toThrow()
     await Promise.all([a.teams.remove(t), a.teams.remove(t)])
@@ -697,6 +698,29 @@ describe('Firebase multiple-team membership (#24)', () => {
       expect((await getDoc(doc(db,'users',ub.uid))).data()).toMatchObject({teamIds:[other],teamId:other,displayName:'テスト'})
       expect((await getDoc(doc(db,'teams',other))).exists()).toBe(true)
     })
+  })
+  it('keeps members working when a deletion is abandoned midway, and lets them leave with consistent item counts', async () => {
+    const a = await client(), b = await client()
+    const ua = (await waitFor<AuthUser | null>((cb) => a.auth.onAuthStateChanged(cb), (u) => !!u))!
+    const ub = (await waitFor<AuthUser | null>((cb) => b.auth.onAuthStateChanged(cb), (u) => !!u))!
+    const t = await a.teams.create('放置される削除', '管理者')
+    await b.teams.join(await a.teams.getJoinCode(t), 'メンバー')
+    const held = await a.equipment.add(t, {name:'持っている用具'})
+    await b.equipment.hold(t, held)
+    // 管理者が削除を始めたまま戻ってこない状態を再現
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore() as unknown as Firestore, 'teams', t), {deletionUid: ua.uid})
+    })
+    const e = await a.events.create(t, {title:'予定',typeId:'practice',startAt:new Date(),place:null}).catch(() => null)
+    expect(e).toBeTypeOf('string')
+    await b.events.setAttendance(t, e!, 'late')
+    await b.equipment.release(t, held)
+    await b.equipment.hold(t, held)
+    await b.teams.leave(t)
+    expect(await waitFor<UserProfile | null>((cb) => b.users.subscribeProfile(ub.uid, cb), (p) => !(p?.teamIds ?? []).includes(t)))
+      .toMatchObject({teamIds: [], teamId: null})
+    const item = await waitFor<EquipmentItem[]>((cb) => a.equipment.subscribe(t, cb), (items) => items.length === 1 && !items[0].holderUid)
+    expect(item[0].holderUid).toBeNull()
   })
   it('migrates legacy single-team profiles without losing the membership', async () => {
     const r = await client()
@@ -723,13 +747,14 @@ describe('multi-team security boundaries (#24)', () => {
     await assertFails(getDoc(doc(dbFor('other'),'users/member')))
     await assertFails(updateDoc(doc(db,'users/member'), {teamIds:['t','t']}))
   })
-  it('locks writes and membership changes after deletion begins; only its initiator can clean up', async () => {
+  it('keeps existing members working after deletion begins; only its initiator can clean up', async () => {
     const admin = dbFor('admin'), member = dbFor('member')
     await assertSucceeds(updateDoc(doc(admin,'teams/t'), {deletionUid:'admin'}))
     await assertFails(updateDoc(doc(admin,'teams/t'), {deletionUid:'member'}))
-    await assertFails(updateDoc(doc(admin,'teams/t'), {name:'変更'}))
-    await assertFails(setDoc(doc(admin,'teams/t/events/new'),eventData()))
-    await assertFails(updateDoc(doc(member,'teams/t/events/e'), {'attendance.member':'late',updatedAt:serverTimestamp()}))
+    // 削除が完了するまで、既存メンバーは通常どおり書き込める
+    await assertSucceeds(setDoc(doc(admin,'teams/t/events/new'),eventData()))
+    await assertSucceeds(updateDoc(doc(member,'teams/t/events/e'), {'attendance.member':'late',updatedAt:serverTimestamp()}))
+    // 清掃用の無条件削除は開始した管理者だけ
     await assertFails(deleteDoc(doc(member,'teams/t/equipment/item')))
     await assertFails(deleteDoc(doc(member,'teams/t/members/member')))
     await assertFails(deleteDoc(doc(admin,'teams/t')))

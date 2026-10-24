@@ -350,7 +350,18 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
               await deleteDoc(event.ref)
             }
           }
-          await clear(['teams', t, 'equipment'])
+          // 削除中もメンバーは通常どおり使うため、途中で止まっても所持数（heldCount）が実際の用具と食い違わないよう、
+          // 通常の削除と同じく所持数を更新しながら1点ずつ消す
+          while (true) {
+            const items = await getDocs(query(collection(db, 'teams', t, 'equipment'), limit(100)))
+            if (items.empty) break
+            for (const item of items.docs) {
+              // 同時にメンバーが消した用具は飛ばす。それ以外の失敗は削除を止め、再開に任せる（無限に繰り返さない）
+              await repository.equipment.remove(t, item.id).catch((error: unknown) => {
+                if (!(error instanceof RepositoryError && error.message.includes('見つかりません'))) throw error
+              })
+            }
+          }
           await clear(['teams', t, 'equipmentNames'])
           const code = await getDoc(privateRef(t))
           if (code.exists()) {
