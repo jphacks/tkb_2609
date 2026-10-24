@@ -4,10 +4,9 @@ import { SignUpScreen } from '../features/auth/SignUpScreen'
 import { TeamEntryScreen } from '../features/auth/TeamEntryScreen'
 import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen'
 import type { AuthUser, Member, Team, UserProfile } from '../types'
-import { SessionContext, useRefresh, useRepository, type Session } from './contexts'
+import { SessionContext, TeamNavigationContext, useRefresh, useRepository, type Session, type TeamNavigation } from './contexts'
 import { MainShell } from './MainShell'
 import { useFeedback } from '../components/feedback/context'
-import styles from './app.module.css'
 import { Splash } from './Splash'
 import { useSubscription } from './useSubscription'
 
@@ -39,23 +38,23 @@ function SignedIn({ user }: { user: AuthUser }) {
   const teams = useSubscription<Team[]>((cb) => repo.teams.subscribeMine(cb), [user.uid])
   const [adding, setAdding] = useState(false)
   const { run } = useFeedback()
+  // チームの切り替えは画面上部のヘッダー、追加は設定タブから行う（#59）
+  const navigation = useMemo<TeamNavigation | null>(
+    () =>
+      repo.supports?.multipleTeams && teams
+        ? { teams, select: (teamId) => void run(() => repo.teams.select(teamId)), add: () => setAdding(true) }
+        : null,
+    [repo, teams, run],
+  )
   if (profile === undefined || teams === undefined) return <Splash />
   if (profile === null) return <ConnectionIssue />
   // 2回目以降のログインでは teamId がわかるので、参加コードの入力は不要
   if (!profile.teamId || adding) return <TeamEntryScreen profile={profile} onDone={profile.teamId ? () => setAdding(false) : undefined} />
-  // 対応するリポジトリでチームの切り替え・追加を表示する
-  return <>
-    {repo.supports?.multipleTeams && <div className={styles.teamSwitcher}>
-      <label className="field">
-        <span className="label">表示するチーム</span>
-        <select className="input" value={profile.teamId} onChange={(e) => run(() => repo.teams.select(e.target.value))}>
-          {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-        </select>
-      </label>
-      <button className="btn btn-secondary" onClick={() => setAdding(true)}>チームを追加</button>
-    </div>}
-    <TeamSession key={profile.teamId} user={user} profile={profile} teamId={profile.teamId} />
-  </>
+  return (
+    <TeamNavigationContext.Provider value={navigation}>
+      <TeamSession key={profile.teamId} user={user} profile={profile} teamId={profile.teamId} />
+    </TeamNavigationContext.Provider>
+  )
 }
 
 function TeamSession({ user, profile, teamId }: { user: AuthUser; profile: UserProfile; teamId: string }) {

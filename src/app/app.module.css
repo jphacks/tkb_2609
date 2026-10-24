@@ -115,14 +115,37 @@
   }
 }
 
-.teamSwitcher {
+/* ヘッダー左側のチームの選択欄（#59）。見た目はチーム名の見出しにそろえ、右に開閉の印を付ける */
+/* 幅はチーム名に合わせ（開閉の印を名前のすぐ右に置く）、再取得ボタンは右端に寄せる */
+.teamSelect {
+  position: relative;
   display: flex;
-  align-items: end;
-  gap: 12px;
-  max-width: var(--app-max-w);
-  margin: 0 auto;
-  padding: calc(12px + var(--safe-top)) 16px 12px;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 0;
+  margin-right: auto;
 }
-.teamSwitcher label { flex: 1; min-width: 0; }
-.teamSwitcher select { width: 100%; min-height: 44px; }
-.teamSwitcher button { min-height: 44px; flex-shrink: 0; }
+
+.teamSelect select {
+  max-width: 100%;
+  min-width: 0;
+  field-sizing: content;
+  min-height: 44px;
+  padding: 0 28px 0 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.teamSelect svg {
+  position: absolute;
+  right: 4px;
+  color: var(--text-sub);
+  pointer-events: none;
+}

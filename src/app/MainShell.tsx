@@ -1,11 +1,11 @@
 import { useState, type ComponentType } from 'react'
-import { BoxIcon, CalendarIcon, GearIcon } from '../components/icons'
+import { BoxIcon, CalendarIcon, ChevronDownIcon, GearIcon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import { EquipmentTab } from '../features/equipment/EquipmentTab'
 import { ScheduleTab } from '../features/schedule/ScheduleTab'
 import { SettingsTab } from '../features/settings/SettingsTab'
 import styles from './app.module.css'
-import { useSession } from './contexts'
+import { useSession, useTeamNavigation } from './contexts'
 
 type TabId = 'schedule' | 'equipment' | 'settings'
 
@@ -17,12 +17,30 @@ const TABS: { id: TabId; label: string; Icon: ComponentType<{ size?: number }> }
 
 export function MainShell() {
   const { team } = useSession()
+  const navigation = useTeamNavigation()
   const [tab, setTab] = useState<TabId>('schedule')
 
   return (
     <div className={styles.shell}>
       <div className={styles.headerArea}>
-        <PageHeader title={team.name} />
+        {/* 2チーム以上に所属しているときは、チーム名の位置で切り替える（#59） */}
+        <PageHeader
+          title={team.name}
+          titleControl={
+            navigation && navigation.teams.length > 1 ? (
+              <label className={styles.teamSelect}>
+                <select aria-label="表示するチーム" value={team.id} onChange={(e) => navigation.select(e.target.value)}>
+                  {navigation.teams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDownIcon size={18} />
+              </label>
+            ) : undefined
+          }
+        />
       </div>
 
       <main className={styles.content}>

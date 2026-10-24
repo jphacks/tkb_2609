@@ -517,3 +517,40 @@ describe('password visibility toggle (#33)', () => {
     expect(screen.getByRole('button', { name: 'パスワードを表示' })).toBeTruthy()
   })
 })
+
+// #59：チームの切り替えはヘッダーのチーム名の位置で行い、追加は設定タブから行う
+describe('team switching in the header (#59)', () => {
+  it('shows only the name with one team, a selector with two, and opens team entry from the settings tab', async () => {
+    const h = harness()
+    const user = userEvent.setup()
+    await h.repo.auth.signIn('admin@example.com', 'Bukatsu#2026')
+    render(<App />, { wrapper: h.wrapper })
+    const header = await screen.findByRole('banner')
+    expect(await within(header).findByRole('heading', { name: 'サンプルチーム' })).toBeTruthy()
+    // 上の段（「表示するチーム」の見出しと「チームを追加」）はない
+    expect(screen.queryByText('表示するチーム')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'チームを追加' })).toBeNull()
+    expect(within(header).queryByRole('combobox')).toBeNull()
+    expect(within(header).getByRole('button', { name: '最新の情報に更新' })).toBeTruthy()
+
+    // 2チーム目に参加すると、チーム名の位置が選択欄になる（チームが変わるとヘッダーは作り直される）
+    await act(() => h.repo.teams.create('第二チーム', '山田'))
+    const currentSelect = () => within(screen.getByRole('banner')).getByRole('combobox', { name: '表示するチーム' }) as HTMLSelectElement
+    await waitFor(() => expect(currentSelect().selectedOptions[0].text).toBe('第二チーム'))
+    expect([...currentSelect().options].map((o) => o.text)).toEqual(expect.arrayContaining(['サンプルチーム', '第二チーム']))
+    expect(screen.queryByText('表示するチーム')).toBeNull()
+    await user.selectOptions(currentSelect(), 'サンプルチーム')
+    await waitFor(() =>
+      expect((within(screen.getByRole('banner')).getByRole('combobox') as HTMLSelectElement).selectedOptions[0].text).toBe('サンプルチーム'),
+    )
+    // 再取得ボタンは選択欄と同じ段の右端に残る
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: '最新の情報に更新' })).toBeTruthy()
+
+    // チームの追加は設定タブから
+    await user.click(screen.getByRole('button', { name: '設定' }))
+    await user.click(await screen.findByRole('button', { name: 'チームを追加' }))
+    expect(await screen.findByRole('heading', { name: /さん、ようこそ/ })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: '戻る' }))
+    expect(await screen.findByRole('banner')).toBeTruthy()
+  })
+})

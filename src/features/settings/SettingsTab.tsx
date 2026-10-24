@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useRepository, useSession } from '../../app/contexts'
+import { useRepository, useSession, useTeamNavigation } from '../../app/contexts'
 import { useFeedback } from '../../components/feedback/context'
 import { isMock, resetMockData } from '../../data'
 import { AdminSettings, DeleteTeamSection } from './AdminSettings'
@@ -10,6 +10,7 @@ export function SettingsTab() {
   const repo = useRepository()
   const { team, user, me, members, isAdmin } = useSession()
   const { run, confirm } = useFeedback()
+  const navigation = useTeamNavigation()
   const isLastAdmin = isAdmin && members.filter((m) => m.role === 'admin').length <= 1
 
   const signOut = async () => {
@@ -106,6 +107,19 @@ export function SettingsTab() {
       )}
 
       {isAdmin && repo.supports?.deleteTeam && <DeleteTeamSection />}
+
+      {/* めったに使わないため、画面上部ではなく設定タブに置く（#59） */}
+      {navigation && (
+        <section className={styles.section}>
+          <h2 className="section-title">ほかのチーム</h2>
+          <div className={styles.accountActions}>
+            <button className="btn btn-secondary btn-block" onClick={navigation.add}>
+              チームを追加
+            </button>
+            <p className="hint">参加コードで別のチームに参加するか、新しいチームを作ります。所属するチームは画面上部で切り替えられます。</p>
+          </div>
+        </section>
+      )}
 
       <section className={styles.section}>
         <h2 className="section-title">アカウント</h2>
