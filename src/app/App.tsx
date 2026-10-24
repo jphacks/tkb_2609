@@ -3,7 +3,7 @@ import { LoginScreen } from '../features/auth/LoginScreen'
 import { SignUpScreen } from '../features/auth/SignUpScreen'
 import { TeamEntryScreen } from '../features/auth/TeamEntryScreen'
 import type { AuthUser, Member, Team, UserProfile } from '../types'
-import { SessionContext, useRepository, type Session } from './contexts'
+import { SessionContext, useRefresh, useRepository, type Session } from './contexts'
 import { MainShell } from './MainShell'
 import { Splash } from './Splash'
 import { useSubscription } from './useSubscription'
@@ -31,7 +31,8 @@ function SignedIn({ user }: { user: AuthUser }) {
   const repo = useRepository()
   const profile = useSubscription<UserProfile | null>((cb) => repo.users.subscribeProfile(user.uid, cb), [user.uid])
 
-  if (!profile) return <Splash />
+  if (profile === undefined) return <Splash />
+  if (profile === null) return <ConnectionIssue />
   // 2回目以降のログインでは teamId がわかるので、参加コードの入力は不要
   if (!profile.teamId) return <TeamEntryScreen profile={profile} />
   return <TeamSession key={profile.teamId} user={user} profile={profile} teamId={profile.teamId} />
@@ -57,10 +58,33 @@ function TeamSession({ user, profile, teamId }: { user: AuthUser; profile: UserP
     }
   }, [user, profile, team, members])
 
-  if (!session) return <Splash />
+  if (team === undefined || members === undefined) return <Splash />
+  if (!session) return <ConnectionIssue />
   return (
     <SessionContext.Provider value={session}>
       <MainShell />
     </SessionContext.Provider>
+  )
+}
+
+function ConnectionIssue() {
+  const repo = useRepository()
+  const { refresh } = useRefresh()
+  return (
+    <main className="card" role="alert" style={{ margin: '24px', padding: '24px' }}>
+      <h1>データを読み込めませんでした</h1>
+      <p>通信状態とチームへの所属を確認して、再取得してください。</p>
+      <button className="btn btn-primary" onClick={refresh}>
+        再取得
+      </button>
+      <button
+        className="btn btn-secondary"
+        onClick={() => {
+          void repo.auth.signOut()
+        }}
+      >
+        ログアウト
+      </button>
+    </main>
   )
 }

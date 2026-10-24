@@ -409,11 +409,15 @@ export function createMockRepository(): Repository & { reset(): void } {
         }, cb)
       },
 
-      async create(teamId, input) {
+      async create(teamId, input, initialNote) {
         await sleep(LATENCY_MS)
         const { uid, team } = requireEventEditor(teamId)
         const id = newId()
         team.events[id] = { id, ...input, attendance: {}, createdBy: uid, updatedAt: new Date(), notes: {} }
+        if (initialNote?.trim()) {
+          const noteId = newId()
+          team.events[id].notes[noteId] = { id: noteId, authorUid: uid, authorName: team.members[uid].displayName, body: initialNote.trim(), createdAt: new Date() }
+        }
         commit()
         return id
       },

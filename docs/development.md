@@ -11,7 +11,11 @@ npm run lint     # oxlint
 
 スマホ実機で確認するときは `npm run dev -- --host` で起動し、同じ Wi-Fi から PC の IP アドレスにアクセスする。
 
-## 現在の状態：モック
+## データ接続の切り替え
+
+既定は従来のモックです。`VITE_DATA_BACKEND=firebase` でFirestore版を選択できます。Firebaseアカウントの扱い、`.env.local` の設定、エミュレータ起動とルールテストは [Firebase接続ガイド](firebase.md) を参照してください。実プロジェクトへのルール適用前はエミュレータで検証します。
+
+## モックモード
 
 データは `src/data/mock/` のメモリ上の実装で動いている（Firebase には未接続）。
 

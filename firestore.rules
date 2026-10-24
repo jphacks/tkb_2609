@@ -1,0 +1,194 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function memberPath(t, u) { return /databases/$(database)/documents/teams/$(t)/members/$(u); }
+    function teamPath(t) { return /databases/$(database)/documents/teams/$(t); }
+    function userPath(u) { return /databases/$(database)/documents/users/$(u); }
+    function member(t) { return signedIn() && exists(memberPath(t, me())); }
+    function admin(t) { return member(t) && get(memberPath(t, me())).data.role == 'admin'; }
+    function editor(t) { return member(t) && (admin(t) || get(teamPath(t)).data.settings.eventEditPolicy == 'all'); }
+    function text(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function joining(t, u) {
+      return signedIn() && u == me() && get(userPath(u)).data.teamId == null
+        && getAfter(userPath(u)).data.teamId == t;
+    }
+    function validProfile(d) { return d.keys().hasAll(['displayName', 'teamId']) && d.keys().hasOnly(['displayName', 'teamId'])
+      && text(d.displayName, 40) && (d.teamId == null || text(d.teamId, 128)); }
+    function validMember(d) {
+      return d.keys().hasAll(['displayName', 'role', 'joinedAt', 'joinCode', 'heldCount', 'equipmentChangeId'])
+        && d.keys().hasOnly(['displayName', 'role', 'joinedAt', 'joinCode', 'heldCount', 'equipmentChangeId'])
+        && text(d.displayName, 40) && d.role in ['admin', 'member'] && d.joinedAt is timestamp
+        && d.joinCode is string && d.heldCount is int && d.heldCount >= 0 && d.heldCount <= 100
+        && d.equipmentChangeId is string;
+    }
+    function validType(v) {
+      return v is map && v.keys().hasAll(['id', 'label', 'color']) && v.keys().hasOnly(['id', 'label', 'color'])
+        && text(v.id, 100) && text(v.label, 40) && v.color is string && v.color.matches('^#[0-9a-fA-F]{6}$');
+    }
+    function validSettings(s) {
+      return s.keys().hasAll(['eventEditPolicy', 'eventTypes']) && s.keys().hasOnly(['eventEditPolicy', 'eventTypes'])
+        && s.eventEditPolicy in ['admins', 'all'] && s.eventTypes is list && s.eventTypes.size() > 0 && s.eventTypes.size() <= 10
+        && (s.eventTypes.size() <= 0 || validType(s.eventTypes[0]))
+        && (s.eventTypes.size() <= 1 || validType(s.eventTypes[1]))
+        && (s.eventTypes.size() <= 2 || validType(s.eventTypes[2]))
+        && (s.eventTypes.size() <= 3 || validType(s.eventTypes[3]))
+        && (s.eventTypes.size() <= 4 || validType(s.eventTypes[4]))
+        && (s.eventTypes.size() <= 5 || validType(s.eventTypes[5]))
+        && (s.eventTypes.size() <= 6 || validType(s.eventTypes[6]))
+        && (s.eventTypes.size() <= 7 || validType(s.eventTypes[7]))
+        && (s.eventTypes.size() <= 8 || validType(s.eventTypes[8]))
+        && (s.eventTypes.size() <= 9 || validType(s.eventTypes[9]));
+    }
+    function activeAdminAfter(t) { return getAfter(memberPath(t, getAfter(teamPath(t)).data.adminUid)).data.role == 'admin'; }
+    function validEvent(d) {
+      return d.keys().hasAll(['title', 'typeId', 'startAt', 'place', 'attendance', 'createdBy', 'updatedAt'])
+        && d.keys().hasOnly(['title', 'typeId', 'startAt', 'place', 'attendance', 'createdBy', 'updatedAt'])
+        && text(d.title, 100) && text(d.typeId, 100) && d.startAt is timestamp
+        && (d.place == null || (d.place is string && d.place.size() <= 200))
+        && d.attendance is map && d.attendance.size() <= 100 && text(d.createdBy, 128)
+        && d.updatedAt == request.time;
+    }
+    function equipmentPath(t, i) { return /databases/$(database)/documents/teams/$(t)/equipment/$(i); }
+    function namePath(t, k) { return /databases/$(database)/documents/teams/$(t)/equipmentNames/$(k); }
+    function countChanged(t, u, delta, itemId) {
+      return getAfter(memberPath(t, u)).data.heldCount == get(memberPath(t, u)).data.heldCount + delta
+        && getAfter(memberPath(t, u)).data.equipmentChangeId == itemId;
+    }
+    function counterUpdate(t, u) {
+      let i = request.resource.data.equipmentChangeId;
+      let before = get(equipmentPath(t, i)).data;
+      let after = getAfter(equipmentPath(t, i));
+      return changed().hasOnly(['heldCount', 'equipmentChangeId']) && (
+        (u == me() && before.holderUid == null && after.data.holderUid == u
+          && request.resource.data.heldCount == resource.data.heldCount + 1)
+        || ((u == me() || admin(t)) && before.holderUid == u && after.data.holderUid == null
+          && request.resource.data.heldCount == resource.data.heldCount - 1)
+        || (before.holderUid == u && !existsAfter(equipmentPath(t, i))
+          && request.resource.data.heldCount == resource.data.heldCount - 1)
+      );
+    }
+    match /users/{u} {
+      allow get: if signedIn() && (u == me() || (resource.data.teamId != null && admin(resource.data.teamId)));
+      allow list: if false;
+      allow create: if signedIn() && u == me() && validProfile(request.resource.data) && request.resource.data.teamId == null;
+      allow update: if signedIn() && validProfile(request.resource.data) && (
+        (u == me() && changed().hasOnly(['displayName']))
+        || (u == me() && changed().hasOnly(['teamId']) && resource.data.teamId == null
+          && getAfter(memberPath(request.resource.data.teamId, u)).data.displayName == resource.data.displayName)
+        || ((u == me() || admin(resource.data.teamId)) && changed().hasOnly(['teamId'])
+          && request.resource.data.teamId == null && !existsAfter(memberPath(resource.data.teamId, u)))
+      );
+    }
+    match /joinCodes/{code} {
+      // A missing code may be read to check uniqueness; list is never allowed.
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn() && code.matches('^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$')
+        && request.resource.data.keys().hasAll(['teamId', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['teamId', 'createdAt'])
+        && request.resource.data.createdAt == request.time
+        && getAfter(memberPath(request.resource.data.teamId, me())).data.role == 'admin'
+        && getAfter(/databases/$(database)/documents/teams/$(request.resource.data.teamId)/private/joinCode).data.code == code;
+      allow delete: if admin(resource.data.teamId)
+        && getAfter(/databases/$(database)/documents/teams/$(resource.data.teamId)/private/joinCode).data.code != code;
+    }
+    match /teams/{t} {
+      allow get, list: if member(t);
+      allow create: if signedIn() && request.resource.data.keys().hasAll(['name','createdBy','createdAt','settings','adminUid'])
+        && request.resource.data.keys().hasOnly(['name','createdBy','createdAt','settings','adminUid'])
+        && text(request.resource.data.name, 60) && request.resource.data.createdBy == me()
+        && request.resource.data.createdAt == request.time && request.resource.data.adminUid == me()
+        && validSettings(request.resource.data.settings) && joining(t, me()) && activeAdminAfter(t)
+        && getAfter(/databases/$(database)/documents/joinCodes/$(getAfter(/databases/$(database)/documents/teams/$(t)/private/joinCode).data.code)).data.teamId == t;
+      allow update: if admin(t) && changed().hasOnly(['name', 'settings', 'adminUid'])
+        && text(request.resource.data.name, 60) && validSettings(request.resource.data.settings) && activeAdminAfter(t);
+      match /private/joinCode {
+        allow get: if admin(t);
+        allow create, update: if signedIn() && getAfter(memberPath(t, me())).data.role == 'admin'
+          && request.resource.data.keys().hasOnly(['code'])
+          && getAfter(/databases/$(database)/documents/joinCodes/$(request.resource.data.code)).data.teamId == t
+          && (!exists(/databases/$(database)/documents/teams/$(t)/private/joinCode)
+            || request.resource.data.code == resource.data.code
+            || !existsAfter(/databases/$(database)/documents/joinCodes/$(resource.data.code)));
+      }
+      match /members/{u} {
+        allow get, list: if member(t);
+        allow create: if joining(t, u) && validMember(request.resource.data)
+          && request.resource.data.displayName == get(userPath(u)).data.displayName
+          && request.resource.data.joinedAt == request.time && request.resource.data.heldCount == 0
+          && request.resource.data.equipmentChangeId == '' && (
+            (!exists(teamPath(t)) && getAfter(teamPath(t)).data.createdBy == u && request.resource.data.role == 'admin')
+            || (request.resource.data.role == 'member'
+              && get(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode)).data.teamId == t)
+          );
+        allow update: if member(t) && validMember(request.resource.data) && (
+          (u == me() && changed().hasOnly(['displayName']) && request.resource.data.displayName == getAfter(userPath(u)).data.displayName)
+          || (admin(t) && changed().hasOnly(['role']) && activeAdminAfter(t))
+          || counterUpdate(t, u)
+        );
+        allow delete: if member(t) && (u == me() || admin(t)) && resource.data.heldCount == 0
+          && getAfter(userPath(u)).data.teamId == null && activeAdminAfter(t);
+      }
+      match /events/{e} {
+        allow get, list: if member(t);
+        allow create: if editor(t) && validEvent(request.resource.data)
+          && request.resource.data.createdBy == me() && request.resource.data.attendance.size() == 0;
+        allow update: if member(t) && validEvent(request.resource.data) && (
+          (editor(t) && changed().hasOnly(['title', 'typeId', 'startAt', 'place', 'updatedAt']))
+          || (changed().hasOnly(['attendance', 'updatedAt'])
+            && request.resource.data.attendance.diff(resource.data.attendance).affectedKeys().hasOnly([me()])
+            && (!request.resource.data.attendance.keys().hasAny([me()])
+              || request.resource.data.attendance[me()] in ['absent', 'observe', 'late', 'leave_early']))
+        );
+        allow delete: if editor(t);
+        match /notes/{n} {
+          allow get, list: if member(t) && (exists(/databases/$(database)/documents/teams/$(t)/events/$(e)) || editor(t));
+          allow create: if member(t) && existsAfter(/databases/$(database)/documents/teams/$(t)/events/$(e))
+            && request.resource.data.keys().hasAll(['authorUid', 'authorName', 'body', 'createdAt'])
+            && request.resource.data.keys().hasOnly(['authorUid', 'authorName', 'body', 'createdAt'])
+            && request.resource.data.authorUid == me()
+            && request.resource.data.authorName == get(memberPath(t, me())).data.displayName
+            && text(request.resource.data.body, 2000) && request.resource.data.createdAt == request.time;
+          allow delete: if member(t) && (resource.data.authorUid == me()
+            || (editor(t) && !existsAfter(/databases/$(database)/documents/teams/$(t)/events/$(e))));
+        }
+      }
+      match /equipment/{i} {
+        function validItem(d) { return d.keys().hasAll(['name', 'nameKey', 'holderUid', 'holderName', 'updatedAt'])
+          && d.keys().hasOnly(['name', 'nameKey', 'holderUid', 'holderName', 'updatedAt'])
+          && text(d.name, 100) && text(d.nameKey, 100) && d.nameKey == d.name.lower().replace('\\s+', '')
+          && !d.nameKey.matches('.*[/].*') && d.updatedAt == request.time
+          && ((d.holderUid == null && d.holderName == null)
+            || (d.holderUid is string && d.holderName == getAfter(memberPath(t, d.holderUid)).data.displayName)); }
+        allow get, list: if member(t);
+        allow create: if member(t) && validItem(request.resource.data) && request.resource.data.holderUid == null
+          && !exists(namePath(t, request.resource.data.nameKey))
+          && getAfter(namePath(t, request.resource.data.nameKey)).data.itemId == i;
+        allow update: if member(t) && validItem(request.resource.data) && (
+          (changed().hasOnly(['name', 'nameKey', 'updatedAt'])
+            && getAfter(namePath(t, request.resource.data.nameKey)).data.itemId == i
+            && (request.resource.data.nameKey == resource.data.nameKey
+              || (!exists(namePath(t, request.resource.data.nameKey)) && !existsAfter(namePath(t, resource.data.nameKey)))))
+          || (changed().hasOnly(['holderUid', 'holderName', 'updatedAt']) && (
+            (resource.data.holderUid == null && request.resource.data.holderUid == me() && countChanged(t, me(), 1, i))
+            || (resource.data.holderUid != null && request.resource.data.holderUid == null
+              && (resource.data.holderUid == me() || admin(t)) && countChanged(t, resource.data.holderUid, -1, i))
+            || (resource.data.holderUid == me() && request.resource.data.holderUid == me())
+          ))
+        );
+        allow delete: if member(t) && !existsAfter(namePath(t, resource.data.nameKey))
+          && (resource.data.holderUid == null || countChanged(t, resource.data.holderUid, -1, i));
+      }
+      match /equipmentNames/{key} {
+        allow get: if member(t);
+        allow create: if member(t) && request.resource.data.keys().hasOnly(['itemId'])
+          && getAfter(equipmentPath(t, request.resource.data.itemId)).data.nameKey == key;
+        allow delete: if member(t) && (!existsAfter(equipmentPath(t, resource.data.itemId))
+          || getAfter(equipmentPath(t, resource.data.itemId)).data.nameKey != key);
+      }
+    }
+  }
+}

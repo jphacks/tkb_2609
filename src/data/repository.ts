@@ -21,6 +21,8 @@ import type {
 export type Unsubscribe = () => void
 
 export interface Repository {
+  /** Firestoreの購読失敗を画面へ通知する（モックでは不要） */
+  onError?(cb: (error: RepositoryError) => void): Unsubscribe
   auth: {
     onAuthStateChanged(cb: (user: AuthUser | null) => void): Unsubscribe
     signUp(input: { email: string; password: string; displayName: string }): Promise<void>
@@ -58,7 +60,7 @@ export interface Repository {
   events: {
     /** 今日以降の予定を近い順に */
     subscribeUpcoming(teamId: string, cb: (events: TeamEvent[]) => void): Unsubscribe
-    create(teamId: string, input: EventInput): Promise<string>
+    create(teamId: string, input: EventInput, initialNote?: string): Promise<string>
     update(teamId: string, eventId: string, input: EventInput): Promise<void>
     remove(teamId: string, eventId: string): Promise<void>
     /** 自分の出欠のみ。'present' を渡すとキーを削除する */

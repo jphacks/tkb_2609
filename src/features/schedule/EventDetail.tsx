@@ -118,7 +118,10 @@ function Notes({ eventId }: { eventId: string }) {
   const repo = useRepository()
   const { team, user } = useSession()
   const { run, confirm } = useFeedback()
-  const notes = useSubscription<EventNote[]>((cb) => repo.events.subscribeNotes(team.id, eventId, cb), [team.id, eventId])
+  const notes = useSubscription<EventNote[]>(
+    (cb) => repo.events.subscribeNotes(team.id, eventId, cb),
+    [team.id, eventId],
+  )
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -150,7 +153,11 @@ function Notes({ eventId }: { eventId: string }) {
                 <span className={styles.noteAuthor}>{note.authorName}</span>
                 <span className="muted">{formatDateTime(note.createdAt)}</span>
                 {note.authorUid === user.uid && (
-                  <button className={`icon-btn ${styles.noteDelete}`} onClick={() => remove(note.id)} aria-label="メモを削除">
+                  <button
+                    className={`icon-btn ${styles.noteDelete}`}
+                    onClick={() => remove(note.id)}
+                    aria-label="メモを削除"
+                  >
                     <TrashIcon size={17} />
                   </button>
                 )}
@@ -164,6 +171,8 @@ function Notes({ eventId }: { eventId: string }) {
           <textarea
             className="input"
             rows={2}
+            aria-label="メモを書く"
+            maxLength={2000}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="連絡事項や持ち物などを書き込めます"

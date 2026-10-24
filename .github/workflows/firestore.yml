@@ -1,0 +1,30 @@
+name: Firestore and schedule
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck:tests
+      - run: npm run build
+      - run: npm run build
+        env:
+          VITE_DATA_BACKEND: firebase
+          VITE_USE_FIREBASE_EMULATORS: 'true'
+      - run: npm test
