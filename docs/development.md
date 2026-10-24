@@ -40,6 +40,19 @@ npm run emulators   # 別のターミナルで起動したままにする
 - 同じ Wi-Fi のスマホからも接続できるよう、エミュレータは `0.0.0.0` で待ち受ける。アプリは開いたホスト名（PC の IP アドレス）のエミュレータにつなぐ
 - 初回起動時に Firestore エミュレータ（約 140MB）をダウンロードする。回線が不安定で失敗したら、もう一度起動する
 
+### 本番の Firebase プロジェクト
+
+| 項目 | 値 |
+| --- | --- |
+| プロジェクト ID | `bukatsu20261024`（`.firebaserc` の別名 `prod`） |
+| オーナー | `oniwasobi@gmail.com` |
+| プラン | Spark（無料）。Blaze にはアップグレードしない |
+| 有効な機能 | Authentication（メール／パスワード）、Firestore（本番環境モード） |
+
+- `.firebaserc` の `default` はエミュレータ用の `demo-bukatsu`。本番を操作するコマンドには必ず `--project prod` を付ける（付け忘れても本番には触れない）
+- CLI で本番を操作するには、Firebase コンソールの「プロジェクトの設定 → ユーザーと権限」で自分の Google アカウントをメンバーに追加してもらう
+- `.env.local` の設定値は、チャットや LINE で個別に受け取る（GitHub には上げない）
+
 ### コードからの使い方
 
 `src/data/firebase/app.ts` の `auth` と `db` を使う。エミュレータへの接続や設定値の読み込みはこのファイルで済ませてある。
