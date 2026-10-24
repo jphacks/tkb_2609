@@ -476,7 +476,16 @@ export function createFirestoreRepository(
         })
       }),
       subscribeJoinCode(t, cb) {
-        return watchDoc(privateRef(t), (s) => (s.exists() ? (s.data().code as string) : null), cb, null)
+        return onSnapshot(
+          privateRef(t),
+          (s) => cb(s.exists() ? (s.data().code as string) : null),
+          (e) => {
+            // 設定タブを開いたまま管理者でなくなると、画面が切り替わる前に読み取りが拒否される。
+            // 想定内のためエラーとして通知せず、コードがない状態にする（#43）
+            if ((e as { code?: string }).code !== 'permission-denied') report(e)
+            cb(null)
+          },
+        )
       },
       create: safe(async (name, displayName) => {
         const u = uid(),

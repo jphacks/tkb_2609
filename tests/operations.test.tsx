@@ -182,22 +182,32 @@ describe('equipment UI', () => {
   })
 })
 describe('settings UI', () => {
-  it('subscribes to the private code only after reveal and displays remote regeneration', async () => {
+  it('shows the private code from the start, shares the URL and the code as separate LINE messages (#42 #43)', async () => {
     const h = harness(),
       codes = stream<string | null>('ABCD2345')
     h.repo.teams.subscribeJoinCode = (_teamId, cb) => codes.subscribe(cb)
     h.repo.teams.regenerateJoinCode = vi.fn(async () => 'K7MPX2QA')
     const user = userEvent.setup(),
       view = render(<SettingsTab />, { wrapper: h.wrapper })
-    expect(codes.count()).toBe(0)
-    await user.click(screen.getByRole('button', { name: '参加コードを表示' }))
+    // 「参加コードを表示」ボタンはなく、設定タブを開いたら購読して表示する（#43）
+    expect(screen.queryByRole('button', { name: '参加コードを表示' })).toBeNull()
     expect(codes.count()).toBe(1)
-    codes.emit('K7MPX2QA')
     // 長押しで手動コピーできるよう、コードは読み取り専用の入力欄に表示する（PR #21）
+    expect((screen.getByLabelText('参加コード') as HTMLInputElement).value).toBe('ABCD2345')
+    codes.emit('K7MPX2QA')
     expect((screen.getByLabelText('参加コード') as HTMLInputElement).value).toBe('K7MPX2QA')
-    const link = screen.getByRole('link', { name: 'LINE で共有' }).getAttribute('href')!
-    expect(decodeURIComponent(link)).toContain('K7MPX2QA')
-    expect(decodeURIComponent(link)).toContain('openExternalBrowser=1')
+    // LINE では URL とコードを別のメッセージで送る。コードのメッセージはコードだけ（#42）
+    const shared = (name: string) =>
+      new URL(screen.getByRole('link', { name }).getAttribute('href')!).searchParams.get('text')!
+    const urlText = shared('① アプリの URL を送る')
+    expect(urlText).toContain('openExternalBrowser=1')
+    expect(urlText).not.toContain('K7MPX2QA')
+    expect(shared('② 参加コードを送る')).toBe('K7MPX2QA')
+    // 読み取れない・コードがない場合は、取得中のままにせず再発行できるようにする
+    codes.emit(null)
+    expect(screen.getByText(/参加コードを取得できませんでした/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'コードを再発行' })).toBeTruthy()
+    codes.emit('K7MPX2QA')
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => {}) } })
     await user.click(screen.getByRole('button', { name: '参加コードをコピー' }))
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('K7MPX2QA')
