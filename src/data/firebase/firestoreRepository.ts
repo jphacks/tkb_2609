@@ -3,6 +3,7 @@ import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendEmailVerification,
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
@@ -38,7 +39,7 @@ import {
 import { equipmentNameError, equipmentNameKey } from '../../lib/equipment'
 import { generateJoinCode, normalizeJoinCode } from '../../lib/joinCode'
 import { isStrongPassword } from '../../lib/password'
-import type { EquipmentItem, EventInput, EventNote, Member, Team, TeamEvent, UserProfile } from '../../types'
+import type { AuthUser, EquipmentItem, EventInput, EventNote, Member, Team, TeamEvent, UserProfile } from '../../types'
 import { RepositoryError, type Repository, type Unsubscribe } from '../repository'
 import { repositoryError } from './errors'
 
@@ -97,7 +98,11 @@ const itemFrom = (s: DocumentSnapshot): EquipmentItem => {
 
 class ChangedPossession extends Error {}
 
+const authUserFrom = (user: User): AuthUser => ({ uid: user.uid, email: user.email || '', emailVerified: user.emailVerified })
+
 export function createFirestoreRepository(auth: Auth, db: Firestore): Repository {
+  // reload() では onAuthStateChanged が発火しないため、確認状態の更新はここから通知する
+  const authListeners = new Set<(user: AuthUser | null) => void>()
   const deletionJobs = new Map<string, Promise<void>>()
   const errors = new Set<(error: RepositoryError) => void>()
   const report = (e: unknown) => errors.forEach((cb) => cb(repositoryError(e)))
@@ -264,12 +269,14 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
             } catch (e) {
               report(e)
             }
-            if (active && revision === generation) cb(user ? { uid: user.uid, email: user.email || '' } : null)
+            if (active && revision === generation) cb(user ? authUserFrom(user) : null)
           },
           report,
         )
+        authListeners.add(cb)
         return () => {
           active = false
+          authListeners.delete(cb)
           off()
         }
       },
@@ -281,6 +288,20 @@ export function createFirestoreRepository(auth: Auth, db: Firestore): Repository
         await updateProfile(user, { displayName: name })
         await ensureProfile(user)
         await updateDoc(userRef(user.uid), { displayName: name })
+        // 登録したメールアドレスが本人のものか確認する。確認が済むまでチームの操作はできない（#39）
+        await sendEmailVerification(user)
+      }),
+      sendEmailVerification: safe(async () => {
+        if (!auth.currentUser) throw new RepositoryError('ログインしてください。')
+        await sendEmailVerification(auth.currentUser)
+      }),
+      reloadUser: safe(async () => {
+        const user = auth.currentUser
+        if (!user) return
+        await user.reload()
+        // セキュリティルールが参照する email_verified を、新しいトークンに反映する
+        await user.getIdToken(true)
+        authListeners.forEach((cb) => cb(authUserFrom(user)))
       }),
       signIn: safe(async (email, password) => {
         await setPersistence(auth, browserLocalPersistence)

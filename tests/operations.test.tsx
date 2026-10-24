@@ -21,7 +21,7 @@ afterEach(() => {
 const baseSession = (): Session => {
   const me = { uid: 'admin', displayName: '管理者', role: 'admin' as const, joinedAt: new Date() }
   return {
-    user: { uid: 'admin', email: 'admin@example.invalid' },
+    user: { uid: 'admin', email: 'admin@example.invalid', emailVerified: true },
     profile: { uid: 'admin', displayName: '管理者', teamIds: ['team'], teamId: 'team' },
     team: {
       id: 'team',
@@ -387,5 +387,27 @@ describe('team deletion recovery (#24)', () => {
       expect(screen.queryByRole('heading', {name:'チームを削除中です'})).toBeNull()
       expect(screen.queryByRole('button', {name:'削除を再開'})).toBeNull()
     }
+  })
+})
+
+// #39：メールアドレスを確認するまでは、確認待ちの画面だけを表示する
+describe('email verification gate (#39)', () => {
+  it('shows the verification screen to unverified users and lets them resend or re-check', async () => {
+    const h = harness()
+    const unverified = { uid: 'admin', email: 'admin@example.invalid', emailVerified: false }
+    vi.spyOn(h.repo.auth, 'onAuthStateChanged').mockImplementation((cb) => {
+      cb(unverified)
+      return () => {}
+    })
+    const resend = vi.spyOn(h.repo.auth, 'sendEmailVerification').mockResolvedValue()
+    const reload = vi.spyOn(h.repo.auth, 'reloadUser').mockResolvedValue()
+    render(<App />, { wrapper: h.wrapper })
+    expect(await screen.findByRole('heading', { name: 'メールアドレスを確認してください' })).toBeTruthy()
+    expect(screen.getByText('admin@example.invalid')).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'チームを作る' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: '確認メールを再送' }))
+    expect(resend).toHaveBeenCalledTimes(1)
+    await userEvent.click(screen.getByRole('button', { name: '確認しました' }))
+    expect(reload).toHaveBeenCalled()
   })
 })

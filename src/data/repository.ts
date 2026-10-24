@@ -31,6 +31,10 @@ export interface Repository {
     signIn(email: string, password: string): Promise<void>
     signOut(): Promise<void>
     sendPasswordReset(email: string): Promise<void>
+    /** ログイン中のユーザーに、メールアドレスの確認メールを（再）送信する */
+    sendEmailVerification(): Promise<void>
+    /** 確認メールのリンクを開いたあと、確認済みかどうかを読み直して onAuthStateChanged に通知する */
+    reloadUser(): Promise<void>
   }
   users: {
     subscribeProfile(uid: string, cb: (profile: UserProfile | null) => void): Unsubscribe
