@@ -1,7 +1,7 @@
 import type { AuthUser, EquipmentItem, EventNote, Member, Team, TeamEvent, UserProfile } from '../src/types'
 import { readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
   assertFails,
   assertSucceeds,
@@ -78,6 +78,11 @@ beforeAll(async () => {
 afterAll(async () => {
   await Promise.all(apps.map((app) => deleteApp(app)))
   await env.cleanup()
+})
+// 前のテストの購読・修復トランザクションを残したままclearすると、
+// エミュレータの初期化が500になる場合がある。各テストのクライアントを閉じる。
+afterEach(async () => {
+  await Promise.all(apps.splice(0).map((app) => deleteApp(app)))
 })
 beforeEach(async () => {
   await env.clearFirestore()
