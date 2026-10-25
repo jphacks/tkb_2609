@@ -155,27 +155,75 @@ export function createFirestoreRepository(
       else if (!profile.data().teamIds) tx.update(ref, { teamIds: teamIdsFrom(profile.data()) })
     })
   }
+  // 同じチームの一覧・メンバー・予定が同時に拒否されても、修復は一度にまとめる。
+  const membershipRepairs = new Map<string, Promise<boolean>>()
+  const repairedMemberships = new Set<string>()
+  function repairMembership(t: string): Promise<boolean> {
+    const user = auth.currentUser
+    if (!user?.emailVerified) return Promise.resolve(false)
+    const key = `${user.uid}/${t}`
+    const pending = membershipRepairs.get(key)
+    if (pending) return pending
+    const task = runTransaction(db, async (tx) => {
+      if (auth.currentUser !== user) return false
+      const profile = await tx.get(userRef(user.uid))
+      if (!profile.exists()) return false
+      const data = profile.data(), ids = teamIdsFrom(data)
+      if (!ids.includes(t)) return repairedMemberships.has(key)
+      const remaining = ids.filter((id) => id !== t)
+      // キャッシュの欠落・permission-deniedだけでは削除を確定しない。
+      // removal() がサーバー上の本人メンバーの不存在を検証し、有効な所属の削除を拒否する。
+      tx.update(profile.ref, {
+        teamIds: remaining,
+        teamId: data.teamId === t ? remaining[0] ?? null : data.teamId,
+        membershipChangeTeamId: t,
+      })
+      return true
+    }).then((repaired) => {
+      if (repaired) repairedMemberships.add(key)
+      return repaired
+    }).catch(() => false)
+    membershipRepairs.set(key, task)
+    void task.finally(() => membershipRepairs.delete(key))
+    return task
+  }
   function watchDoc<T>(ref: ReturnType<typeof doc>, map: (s: DocumentSnapshot) => T, cb: (data: T) => void, empty: T) {
-    return recoveringSubscription<DocumentSnapshot>(
+    let active = true
+    const parts = ref.path.split('/')
+    const teamId = parts[0] === 'teams' ? parts[1] : undefined
+    const off = recoveringSubscription<DocumentSnapshot>(
       auth,
       (next, error) => onSnapshot(ref, next, error),
       (s) => cb(map(s)),
       (e) => {
-        report(e)
-        cb(empty)
+        void (async () => {
+          const repaired = teamId && (e as { code?: string }).code === 'permission-denied'
+            ? await repairMembership(teamId) : false
+          if (!active) return
+          if (!repaired) report(e)
+          cb(empty)
+        })()
       },
     )
+    return () => { active = false; off() }
   }
-  function watchList<T>(q: Query<DocumentData>, map: (s: DocumentSnapshot) => T, cb: (data: T[]) => void) {
-    return recoveringSubscription<QuerySnapshot<DocumentData>>(
+  function watchList<T>(q: Query<DocumentData>, map: (s: DocumentSnapshot) => T, cb: (data: T[]) => void, teamId: string) {
+    let active = true
+    const off = recoveringSubscription<QuerySnapshot<DocumentData>>(
       auth,
       (next, error) => onSnapshot(q, next, error),
       (s) => cb(s.docs.map(map)),
       (e) => {
-        report(e)
-        cb([])
+        void (async () => {
+          const repaired = (e as { code?: string }).code === 'permission-denied'
+            ? await repairMembership(teamId) : false
+          if (!active) return
+          if (!repaired) report(e)
+          cb([])
+        })()
       },
     )
+    return () => { active = false; off() }
   }
   async function requireMember(t: string) {
     const m = await getDoc(memberRef(t, uid()))
@@ -558,7 +606,7 @@ export function createFirestoreRepository(
         return watchDoc(teamRef(t), teamFrom, cb, null)
       },
       subscribeMembers(t, cb) {
-        return watchList(query(collection(db, 'teams', t, 'members')), memberFrom, cb)
+        return watchList(query(collection(db, 'teams', t, 'members')), memberFrom, cb, t)
       },
       rename: safe(async (t, name) => updateDoc(teamRef(t), { name: requiredText(name, 60) })),
       updateSettings: safe(async (t, settings) => {
@@ -626,6 +674,7 @@ export function createFirestoreRepository(
             ),
             eventFrom,
             (events) => cb(events.filter((event) => !event.deleting)),
+            t,
           )
           const tomorrow = new Date(today)
           tomorrow.setDate(tomorrow.getDate() + 1)
@@ -700,7 +749,7 @@ export function createFirestoreRepository(
         )
       }),
       subscribeNotes(t, e, cb) {
-        return watchList(query(collection(db, 'teams', t, 'events', e, 'notes'), orderBy('createdAt')), noteFrom, cb)
+        return watchList(query(collection(db, 'teams', t, 'events', e, 'notes'), orderBy('createdAt')), noteFrom, cb, t)
       },
       addNote: safe(async (t, e, body) => {
         const m = await requireMember(t)
@@ -715,7 +764,7 @@ export function createFirestoreRepository(
     },
     equipment: {
       subscribe(t, cb) {
-        return watchList(query(collection(db, 'teams', t, 'equipment')), itemFrom, cb)
+        return watchList(query(collection(db, 'teams', t, 'equipment')), itemFrom, cb, t)
       },
       add: safe(async (t, input) => {
         const name = validName(input.name),
