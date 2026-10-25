@@ -1,13 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { useRepository } from '../../app/contexts'
-import { CheckIcon } from '../../components/icons'
+import { BackIcon, CheckIcon } from '../../components/icons'
 import { RepositoryError } from '../../data/repository'
 import { PASSWORD_RULES, isStrongPassword } from '../../lib/password'
 import { PasswordInput } from '../../components/PasswordInput'
 import styles from './auth.module.css'
 import { GoogleSignIn } from './GoogleSignIn'
 
-export function SignUpScreen({ onLogin }: { onLogin(): void }) {
+export function SignUpScreen({ onLogin, onBack }: { onLogin(): void; onBack?(): void }) {
   const repo = useRepository()
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
@@ -32,6 +32,12 @@ export function SignUpScreen({ onLogin }: { onLogin(): void }) {
 
   return (
     <div className={styles.screen}>
+      {onBack && (
+        <button type="button" className={`btn btn-ghost btn-sm ${styles.backLink}`} onClick={onBack}>
+          <BackIcon size={18} />
+          トップへ戻る
+        </button>
+      )}
       <div className={styles.heading}>
         <h1 className={styles.title}>アカウントを作成</h1>
       </div>

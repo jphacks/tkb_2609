@@ -3,6 +3,7 @@ import { LoginScreen } from '../features/auth/LoginScreen'
 import { SignUpScreen } from '../features/auth/SignUpScreen'
 import { TeamEntryScreen } from '../features/auth/TeamEntryScreen'
 import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen'
+import { LandingScreen } from '../features/landing/LandingScreen'
 import type { AuthUser, Member, Team, UserProfile } from '../types'
 import { canSwitchTeam, SessionContext, TeamNavigationContext, useRefresh, useRepository, useTeamNavigation, type Session, type TeamNavigation } from './contexts'
 import { MainShell, type TabId } from './MainShell'
@@ -16,16 +17,19 @@ import { useSubscription } from './useSubscription'
 export function App() {
   const repo = useRepository()
   const [user, setUser] = useState<AuthUser | null>()
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
+  const [authMode, setAuthMode] = useState<'landing' | 'login' | 'signup'>('landing')
 
   useEffect(() => repo.auth.onAuthStateChanged(setUser), [repo])
 
   if (user === undefined) return <Splash />
   if (user === null) {
+    if (authMode === 'landing') {
+      return <LandingScreen onSignUp={() => setAuthMode('signup')} onLogin={() => setAuthMode('login')} />
+    }
     return authMode === 'login' ? (
-      <LoginScreen onSignUp={() => setAuthMode('signup')} />
+      <LoginScreen onSignUp={() => setAuthMode('signup')} onBack={() => setAuthMode('landing')} />
     ) : (
-      <SignUpScreen onLogin={() => setAuthMode('login')} />
+      <SignUpScreen onLogin={() => setAuthMode('login')} onBack={() => setAuthMode('landing')} />
     )
   }
   // メールアドレスを確認するまでは、チームの作成・参加などを始めない（#39）
