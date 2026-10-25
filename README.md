@@ -12,6 +12,12 @@ BUKATSUは、部活・サークルなどのチーム向けに、予定・出欠�
 
 ※ 画像はモックのサンプルデータで表示したものです。
 
+## デモ動画
+
+[![BUKATSUのデモ動画（YouTube）](https://img.youtube.com/vi/jk7Fby7LXbA/hqdefault.jpg)](https://youtu.be/jk7Fby7LXbA)
+
+[YouTubeでデモ動画を見る](https://youtu.be/jk7Fby7LXbA)
+
 ## BUKATSU
 
 [BUKATSUを使う（Firebase Hosting）](https://bukatsu20261024.web.app/)
