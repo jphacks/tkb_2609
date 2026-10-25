@@ -4,6 +4,7 @@ import { SignUpScreen } from '../features/auth/SignUpScreen'
 import { TeamEntryScreen } from '../features/auth/TeamEntryScreen'
 import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen'
 import { LandingScreen } from '../features/landing/LandingScreen'
+import { isSharedLink } from '../lib/inAppBrowser'
 import type { AuthUser, Member, Team, UserProfile } from '../types'
 import { canSwitchTeam, SessionContext, TeamNavigationContext, useRefresh, useRepository, useTeamNavigation, type Session, type TeamNavigation } from './contexts'
 import { MainShell, type TabId } from './MainShell'
@@ -17,7 +18,8 @@ import { useSubscription } from './useSubscription'
 export function App() {
   const repo = useRepository()
   const [user, setUser] = useState<AuthUser | null>()
-  const [authMode, setAuthMode] = useState<'landing' | 'login' | 'signup'>('landing')
+  // 共有されたリンクから開いたときは、紹介ページを飛ばしてログイン画面から始める（#79）
+  const [authMode, setAuthMode] = useState<'landing' | 'login' | 'signup'>(() => (isSharedLink(location.href) ? 'login' : 'landing'))
 
   useEffect(() => repo.auth.onAuthStateChanged(setUser), [repo])
 
