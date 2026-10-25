@@ -917,3 +917,77 @@ describe('Google sign-in (#31)', () => {
     await expect(signInWithEmailAndPassword(auth, email, 'Example123!')).resolves.toBeTruthy()
   })
 })
+
+describe('stale membership recovery (#97)', () => {
+  async function fixture() {
+    const repo = await client()
+    const user = (await waitFor<AuthUser | null>((cb) => repo.auth.onAuthStateChanged(cb), (u) => !!u))!
+    const team = await repo.teams.create('有効なチーム', 'テスト')
+    return { repo, user, team }
+  }
+  async function corruptProfile(uid: string, ids: string[], selected: string | null) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), `users/${uid}`), { teamIds: ids, teamId: selected })
+    })
+  }
+  it('repairs two missing teams, keeps the active membership and reconnects without errors', async () => {
+    const { repo, user, team } = await fixture()
+    await corruptProfile(user.uid, ['missing-one', 'missing-two', team], team)
+    const errors: string[] = []
+    const offErrors = repo.onError!((e) => errors.push(e.message))
+    const off = repo.teams.subscribeMine(() => {})
+    try {
+      const profile = await waitFor<UserProfile | null>((cb) => repo.users.subscribeProfile(user.uid, cb), (p) => p?.teamIds.length === 1)
+      expect(profile).toMatchObject({ teamIds: [team], teamId: team })
+      expect((await waitFor<Team[]>((cb) => repo.teams.subscribeMine(cb), (ts) => ts.length === 1))[0].id).toBe(team)
+      expect(errors).toEqual([])
+    } finally { off(); offErrors() }
+  })
+  it('repairs an invalid selected team while its team, members and events are subscribed', async () => {
+    const { repo, user, team } = await fixture()
+    await corruptProfile(user.uid, ['missing', team], 'missing')
+    const errors: string[] = []
+    const stops = [
+      repo.onError!((e) => errors.push(e.message)),
+      repo.teams.subscribeMine(() => {}),
+      repo.teams.subscribe('missing', () => {}),
+      repo.teams.subscribeMembers('missing', () => {}),
+      repo.events.subscribeUpcoming('missing', () => {}),
+    ]
+    try {
+      const profile = await waitFor<UserProfile | null>((cb) => repo.users.subscribeProfile(user.uid, cb), (p) => p?.teamId === team)
+      expect(profile?.teamIds).toEqual([team])
+      expect(await waitFor<Member[]>((cb) => repo.teams.subscribeMembers('missing', cb))).toEqual([])
+      expect(errors).toEqual([])
+    } finally { stops.forEach((stop) => stop()) }
+  })
+  it('returns to no selected team when all memberships are invalid', async () => {
+    const { repo, user } = await fixture()
+    await corruptProfile(user.uid, ['missing-one', 'missing-two'], 'missing-one')
+    const off = repo.teams.subscribeMine(() => {})
+    try {
+      const profile = await waitFor<UserProfile | null>((cb) => repo.users.subscribeProfile(user.uid, cb), (p) => p?.teamId === null)
+      expect(profile?.teamIds).toEqual([])
+    } finally { off() }
+  })
+  it('repairs a stale membership in an existing team after the member document is removed', async () => {
+    const { repo, user, team } = await fixture()
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), `teams/${team}/members/${user.uid}`))
+    })
+    const off = repo.teams.subscribeMine(() => {})
+    try {
+      const profile = await waitFor<UserProfile | null>((cb) => repo.users.subscribeProfile(user.uid, cb), (p) => p?.teamId === null)
+      expect(profile?.teamIds).toEqual([])
+    } finally { off() }
+  })
+  it('rules reject removing a valid membership or adding a team through repair fields', async () => {
+    const { user, team } = await fixture()
+    const db = dbFor(user.uid)
+    const ref = doc(db, 'users', user.uid)
+    await assertFails(updateDoc(ref, { teamIds: [], teamId: null, membershipChangeTeamId: team }))
+    await assertFails(updateDoc(ref, { teamIds: [team, 'arbitrary'], teamId: 'arbitrary', membershipChangeTeamId: 'arbitrary' }))
+    await assertFails(updateDoc(doc(dbFor('outsider'), 'users', user.uid), { teamIds: [], teamId: null, membershipChangeTeamId: team }))
+    expect((await getDoc(ref)).data()?.teamIds).toEqual([team])
+  })
+})
