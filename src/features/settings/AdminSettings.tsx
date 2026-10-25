@@ -7,11 +7,12 @@ import { CopyIcon, PlusIcon, TrashIcon } from '../../components/icons'
 import type { EventEditPolicy, EventType } from '../../types'
 import styles from './settings.module.css'
 import { copyText } from '../../lib/clipboard'
+import { sharedLinkUrl } from '../../lib/entry'
 
 const TYPE_COLORS = ['#2563eb', '#e8590c', '#12a150', '#7c5cdb', '#d6336c', '#0e9aa7', '#6b7280']
 
-// メンバーに共有するアプリのリンク。LINE から開いても外部ブラウザが起動するようにする（#56）
-const APP_URL = `${location.origin}/?openExternalBrowser=1`
+// メンバーに共有するアプリのリンク。LINE から開いても外部ブラウザが起動し、紹介ページではなくログイン画面から始まる（#56、#87）
+const APP_URL = sharedLinkUrl(location.origin)
 
 /** 管理者だけに表示する設定 */
 export function AdminSettings() {
