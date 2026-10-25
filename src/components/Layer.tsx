@@ -13,7 +13,7 @@ export function Layer({
   children,
 }: {
   title: string
-  onBack(): void
+  onBack?(): void
   actions?: ReactNode
   children: ReactNode
 }) {
@@ -27,7 +27,7 @@ export function Layer({
   }, [])
 
   return (
-    <div className={styles.backdrop} onClick={(e) => e.target === e.currentTarget && onBack()}>
+    <div className={styles.backdrop} onClick={(e) => e.target === e.currentTarget && onBack?.()}>
       <div className={styles.layer}>
         <PageHeader title={title} onBack={onBack} actions={actions} />
         <div className={styles.body}>{children}</div>

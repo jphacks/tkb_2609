@@ -7,6 +7,7 @@ import { CopyIcon, PlusIcon, TrashIcon } from '../../components/icons'
 import type { EventEditPolicy, EventType } from '../../types'
 import styles from './settings.module.css'
 import { copyText } from '../../lib/clipboard'
+import { PlacesSection } from './PlacesSection'
 import { sharedLinkUrl } from '../../lib/entry'
 
 const TYPE_COLORS = ['#2563eb', '#e8590c', '#12a150', '#7c5cdb', '#d6336c', '#0e9aa7', '#6b7280']
@@ -21,6 +22,7 @@ export function AdminSettings() {
       <JoinCodeSection />
       <EditPolicySection />
       <EventTypesSection />
+      <PlacesSection />
     </>
   )
 }

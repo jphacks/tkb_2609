@@ -17,6 +17,8 @@ export interface EventType {
 export interface TeamSettings {
   eventEditPolicy: EventEditPolicy
   eventTypes: EventType[]
+  /** 旧データでは未設定。順序を維持する */
+  places?: string[]
 }
 
 export interface Team {
@@ -82,9 +84,11 @@ export interface AuthUser {
   email: string
   /** 登録したメールアドレスの持ち主であることを、確認メールのリンクで確認済みか（#39） */
   emailVerified: boolean
+  providers?: string[]
 }
 
 export interface UserProfile {
+  deletingAccount?: boolean
   uid: string
   displayName: string
   teamIds: string[]
