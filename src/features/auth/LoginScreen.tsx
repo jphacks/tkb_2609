@@ -40,7 +40,7 @@ export function LoginScreen({ onSignUp }: { onSignUp(): void }) {
   return (
     <div className={styles.screen}>
       <div className={styles.brand}>
-        <img src="/favicon.svg" alt="" width={52} height={52} />
+        <img src="/icons/bukatsu-bu-192.png" alt="" width={52} height={52} />
         <h1 className={styles.appName}>BUKATSU</h1>
         <p className={styles.tagline}>予定と用具を、チームでかんたんに共有</p>
       </div>
