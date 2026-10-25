@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ja">
+  <head><meta charset="UTF-8" /><title>認証の複数タブ確認（エミュレータ専用）</title></head>
+  <body>
+    <h1>認証の複数タブ確認（エミュレータ専用）</h1>
+    <p>demo-bukatsu の Auth 9099 / Firestore 8080 を起動してください。Googleは架空の資格情報を使い、実Googleには接続しません。</p>
+    <button id="signup">メールで新規登録</button>
+    <button id="email">メールでログイン</button>
+    <button id="google">Googleのテスト用資格情報でログイン</button>
+    <button id="logout">ログアウト</button>
+    <p id="state" role="status">初期化中</p>
+    <p id="error" role="alert"></p>
+    <h2>このタブの認証状態の通知履歴</h2>
+    <ol id="history"></ol>
+    <script type="module" src="./auth-persistence.ts"></script>
+  </body>
+</html>
