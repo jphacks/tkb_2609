@@ -66,3 +66,6 @@ export function useSession(): Session {
 export function canSwitchTeam(navigation: TeamNavigation | null, teamId: string): navigation is TeamNavigation {
   return !!navigation && navigation.teams.length > 1 && navigation.teams.some((t) => t.id === teamId)
 }
+
+export const AccountNavigationContext = createContext<(() => void) | null>(null)
+export const useAccountNavigation = () => useContext(AccountNavigationContext)

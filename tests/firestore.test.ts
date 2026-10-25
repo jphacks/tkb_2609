@@ -1,7 +1,7 @@
 import type { AuthUser, EquipmentItem, EventNote, Member, Team, TeamEvent, UserProfile } from '../src/types'
 import { readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
   assertFails,
   assertSucceeds,
@@ -14,6 +14,7 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithCredential,
+  reauthenticateWithCredential,
   signInWithEmailAndPassword,
   type Auth,
   type UserCredential,
@@ -77,6 +78,11 @@ beforeAll(async () => {
 afterAll(async () => {
   await Promise.all(apps.map((app) => deleteApp(app)))
   await env.cleanup()
+})
+// 前のテストの購読・修復トランザクションを残したままclearすると、
+// エミュレータの初期化が500になる場合がある。各テストのクライアントを閉じる。
+afterEach(async () => {
+  await Promise.all(apps.splice(0).map((app) => deleteApp(app)))
 })
 beforeEach(async () => {
   await env.clearFirestore()
@@ -873,6 +879,7 @@ function googleClient(account: { email: string; name: string }, googleSignIn?: (
   const idToken = JSON.stringify({ sub: randomUUID(), email: account.email, email_verified: true, name: account.name })
   const repo = createFirestoreRepository(auth, db, {
     googleSignIn: googleSignIn ?? ((a) => signInWithCredential(a, GoogleAuthProvider.credential(idToken))),
+    googleReauthenticate: (user) => reauthenticateWithCredential(user, GoogleAuthProvider.credential(idToken)),
   })
   return { repo, auth }
 }
@@ -989,5 +996,127 @@ describe('stale membership recovery (#97)', () => {
     await assertFails(updateDoc(ref, { teamIds: [team, 'arbitrary'], teamId: 'arbitrary', membershipChangeTeamId: 'arbitrary' }))
     await assertFails(updateDoc(doc(dbFor('outsider'), 'users', user.uid), { teamIds: [], teamId: null, membershipChangeTeamId: team }))
     expect((await getDoc(ref)).data()?.teamIds).toEqual([team])
+  })
+})
+
+describe('saved places (#45)', () => {
+  it('preserves ordered places and existing event text; validates SDK and direct writes', async () => {
+    const a = await client(), b = await client(), t = await a.teams.create('場所テスト', '名前')
+    await b.teams.join(await a.teams.getJoinCode(t), '名前')
+    await a.teams.updateSettings(t, { places: [' 第一会議室 ', '体育館'] })
+    expect((await waitFor<Team | null>((cb) => a.teams.subscribe(t, cb), (team) => !!team?.settings.places))?.settings.places).toEqual(['第一会議室', '体育館'])
+    const e = await a.events.create(t, { title: '集まり', typeId: 'practice', startAt: new Date(Date.now() + 86400000), place: '第一会議室' })
+    await a.teams.updateSettings(t, { places: ['体育館', '新会議室'] })
+    expect((await waitFor<Team | null>((cb) => a.teams.subscribe(t, cb), (team) => team?.settings.places?.[0] === '体育館'))?.settings.places).toEqual(['体育館', '新会議室'])
+    expect((await waitFor<TeamEvent[]>((cb) => a.events.subscribeUpcoming(t, cb)))[0]).toMatchObject({ id: e, place: '第一会議室' })
+    await expect(b.teams.updateSettings(t, { places: ['無権限'] })).rejects.toThrow()
+    await expect(a.teams.updateSettings(t, { places: Array.from({ length: 21 }, (_, i) => `${i}`) })).rejects.toThrow()
+    await expect(a.teams.updateSettings(t, { places: ['重複', '重複'] })).rejects.toThrow()
+    await expect(a.teams.updateSettings(t, { places: [' '] })).rejects.toThrow()
+    const user = (await waitFor<AuthUser | null>((cb) => a.auth.onAuthStateChanged(cb), (u) => !!u))!
+    const ref = doc(dbFor(user.uid), 'teams', t)
+    for (const bad of [Array(21).fill('x'), [123], ['x'.repeat(101)], [''], ['重複', '重複']]) await assertFails(updateDoc(ref, { 'settings.places': bad }))
+    await a.teams.updateSettings(t, { places: [] })
+  })
+})
+
+describe('account settings and deletion (#68, #100)', () => {
+  it('updates only the account name and configures Japanese auth', async () => {
+    const { auth, db } = emulatorApp(), r = createFirestoreRepository(auth, db)
+    expect(auth.languageCode).toBe('ja')
+    await r.auth.signUp({ email: `${randomUUID()}@example.invalid`, password: 'Example123!', displayName: '登録名' })
+    const uid = auth.currentUser!.uid
+    await markEmailVerified(uid); await r.auth.reloadUser()
+    const t = await r.teams.create('チーム', 'チーム内の名前')
+    await r.users.updateAccountName(' 新しいアカウント名 ')
+    expect((await waitFor<UserProfile | null>((cb) => r.users.subscribeProfile(uid, cb)))?.displayName).toBe('新しいアカウント名')
+    expect((await waitFor<Member[]>((cb) => r.teams.subscribeMembers(t, cb)))[0].displayName).toBe('チーム内の名前')
+    await expect(r.users.updateAccountName(' ')).rejects.toThrow()
+  })
+  it('reauthenticates and deletes all memberships, releases held equipment and deletes the auth user', async () => {
+    const a = await client(), b = await client()
+    const uid = (await waitFor<AuthUser | null>((cb) => b.auth.onAuthStateChanged(cb), (u) => !!u))!.uid
+    const first = await a.teams.create('第一', '管理者'), second = await a.teams.create('第二', '管理者')
+    await b.teams.join(await a.teams.getJoinCode(first), '名前')
+    await b.teams.join(await a.teams.getJoinCode(second), '名前')
+    const item = await a.equipment.add(first, { name: 'ケース' })
+    await b.equipment.hold(first, item)
+    await expect(b.auth.deleteAccount({ confirmation: '削除', password: 'wrong' })).rejects.toThrow()
+    expect((await waitFor<UserProfile | null>((cb) => b.users.subscribeProfile(uid, cb)))?.teamIds).toEqual([first, second])
+    await b.auth.deleteAccount({ confirmation: '削除', password: 'Example123!' })
+    expect(await waitFor<AuthUser | null>((cb) => b.auth.onAuthStateChanged(cb))).toBeNull()
+    expect((await waitFor<EquipmentItem[]>((cb) => a.equipment.subscribe(first, cb)))[0].holderUid).toBeNull()
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      expect((await getDoc(doc(ctx.firestore(), 'users', uid))).exists()).toBe(false)
+      for (const t of [first, second]) expect((await getDoc(doc(ctx.firestore(), 'teams', t, 'members', uid))).exists()).toBe(false)
+    })
+  })
+  it('does not leave any valid team if the user is a last admin elsewhere', async () => {
+    const a = await client(), b = await client()
+    const first = await a.teams.create('参加先', '管理者')
+    await b.teams.join(await a.teams.getJoinCode(first), '名前')
+    const last = await b.teams.create('最後の管理者', '名前')
+    const uid = (await waitFor<AuthUser | null>((cb) => b.auth.onAuthStateChanged(cb), (u) => !!u))!.uid
+    await expect(b.auth.deleteAccount({ confirmation: '削除', password: 'Example123!' })).rejects.toThrow('最後の管理者')
+    expect((await waitFor<UserProfile | null>((cb) => b.users.subscribeProfile(uid, cb)))?.teamIds).toEqual([first, last])
+  })
+  it('resumes partial deletion and blocks new joins and holds while deleting', async () => {
+    const a = await client(), b = await client()
+    const t = await a.teams.create('チーム', '管理者'), next = await a.teams.create('別チーム', '管理者')
+    await b.teams.join(await a.teams.getJoinCode(t), '名前')
+    const uid = (await waitFor<AuthUser | null>((cb) => b.auth.onAuthStateChanged(cb), (u) => !!u))!.uid
+    await updateDoc(doc(dbFor(uid), 'users', uid), { deletingAccount: true })
+    await expect(b.teams.join(await a.teams.getJoinCode(next), '名前')).rejects.toThrow()
+    const item = await a.equipment.add(t, { name: 'ケース' })
+    await expect(b.equipment.hold(t, item)).rejects.toThrow()
+    await b.teams.leave(t)
+    await b.auth.deleteAccount({ confirmation: '削除', password: 'Example123!' })
+    expect(await waitFor<AuthUser | null>((cb) => b.auth.onAuthStateChanged(cb))).toBeNull()
+  })
+  it('rules prevent deleting another profile, a member profile and deleting with stale authentication', async () => {
+    const r = await client(), t = await r.teams.create('チーム', '名前')
+    const uid = (await waitFor<AuthUser | null>((cb) => r.auth.onAuthStateChanged(cb), (u) => !!u))!.uid
+    await assertFails(deleteDoc(doc(dbFor(uid), 'users', uid)))
+    await assertFails(deleteDoc(doc(dbFor('other'), 'users', uid)))
+    await assertFails(updateDoc(doc(dbFor('other'), 'users', uid), { deletingAccount: true }))
+    await updateDoc(doc(dbFor(uid), 'users', uid), { deletingAccount: true })
+    await assertFails(deleteDoc(doc(dbFor(uid), 'users', uid)))
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), 'teams', t, 'members', uid))
+      await updateDoc(doc(ctx.firestore(), 'users', uid), { teamIds: [], teamId: null })
+    })
+    const stale = env.authenticatedContext(uid, { email_verified: true, auth_time: 1 }).firestore() as unknown as Firestore
+    await assertFails(deleteDoc(doc(stale, 'users', uid)))
+  })
+})
+
+
+describe('Google account deletion and recovery (#68)', () => {
+  it('reauthenticates the same Google account and deletes an unassigned account', async () => {
+    const { repo, auth } = googleClient({ email: `${randomUUID()}@gmail.example`, name: 'テスト' })
+    await repo.auth.signInWithGoogle()
+    await repo.auth.deleteAccount({ confirmation: '削除' })
+    expect(auth.currentUser).toBeNull()
+  })
+  it('can retry when the profile was deleted but the Auth account remained', async () => {
+    const { repo, auth } = googleClient({ email: `${randomUUID()}@gmail.example`, name: 'テスト' })
+    await repo.auth.signInWithGoogle()
+    const uid = auth.currentUser!.uid
+    await env.withSecurityRulesDisabled(async (ctx) => { await deleteDoc(doc(ctx.firestore(), 'users', uid)) })
+    await repo.auth.deleteAccount({ confirmation: '削除' })
+    expect(auth.currentUser).toBeNull()
+  })
+})
+
+describe('account deletion interruption', () => {
+  it('can unlock a failed deletion to fix administrator roles without restoring removed memberships', async () => {
+    const r = await client(), t = await r.teams.create('管理者の確認', '名前')
+    const uid = (await waitFor<AuthUser | null>((cb) => r.auth.onAuthStateChanged(cb), (u) => !!u))!.uid
+    await updateDoc(doc(dbFor(uid), 'users', uid), { deletingAccount: true })
+    await r.auth.cancelAccountDeletion()
+    expect((await waitFor<UserProfile | null>((cb) => r.users.subscribeProfile(uid, cb)))?.deletingAccount).toBe(false)
+    const item = await r.equipment.add(t, { name: 'ケース' })
+    await r.equipment.hold(t, item)
+    expect((await waitFor<EquipmentItem[]>((cb) => r.equipment.subscribe(t, cb)))[0].holderUid).toBe(uid)
   })
 })

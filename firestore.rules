@@ -27,11 +27,12 @@ service cloud.firestore {
     function joining(t, u) {
       let before = ids(get(userPath(u)).data);
       let after = ids(getAfter(userPath(u)).data);
-      return verified() && u == me() && !(t in before) && after.toSet() == before.toSet().union([t].toSet())
+      return verified() && u == me() && !get(userPath(u)).data.get('deletingAccount', false) && !(t in before) && after.toSet() == before.toSet().union([t].toSet())
         && getAfter(userPath(u)).data.teamId == t;
     }
     function validProfile(d) { return d.keys().hasAll(['displayName', 'teamId'])
-      && d.keys().hasOnly(['displayName', 'teamId', 'teamIds', 'membershipChangeTeamId'])
+      && d.keys().hasOnly(['displayName', 'teamId', 'teamIds', 'membershipChangeTeamId', 'deletingAccount'])
+      && (!('deletingAccount' in d) || d.deletingAccount is bool)
       && text(d.displayName, 40) && (d.teamId == null || text(d.teamId, 128)) && validIds(d)
       && (!('membershipChangeTeamId' in d) || text(d.membershipChangeTeamId, 128)); }
     function validMember(d) {
@@ -45,8 +46,33 @@ service cloud.firestore {
       return v is map && v.keys().hasAll(['id', 'label', 'color']) && v.keys().hasOnly(['id', 'label', 'color'])
         && text(v.id, 100) && text(v.label, 40) && v.color is string && v.color.matches('^#[0-9a-fA-F]{6}$');
     }
+    function validPlaces(p) {
+      return p is list && p.size() <= 20 && p.size() == p.toSet().size()
+        && (p.size() <= 0 || text(p[0], 100))
+        && (p.size() <= 1 || text(p[1], 100))
+        && (p.size() <= 2 || text(p[2], 100))
+        && (p.size() <= 3 || text(p[3], 100))
+        && (p.size() <= 4 || text(p[4], 100))
+        && (p.size() <= 5 || text(p[5], 100))
+        && (p.size() <= 6 || text(p[6], 100))
+        && (p.size() <= 7 || text(p[7], 100))
+        && (p.size() <= 8 || text(p[8], 100))
+        && (p.size() <= 9 || text(p[9], 100))
+        && (p.size() <= 10 || text(p[10], 100))
+        && (p.size() <= 11 || text(p[11], 100))
+        && (p.size() <= 12 || text(p[12], 100))
+        && (p.size() <= 13 || text(p[13], 100))
+        && (p.size() <= 14 || text(p[14], 100))
+        && (p.size() <= 15 || text(p[15], 100))
+        && (p.size() <= 16 || text(p[16], 100))
+        && (p.size() <= 17 || text(p[17], 100))
+        && (p.size() <= 18 || text(p[18], 100))
+        && (p.size() <= 19 || text(p[19], 100))
+      ;
+    }
     function validSettings(s) {
-      return s.keys().hasAll(['eventEditPolicy', 'eventTypes']) && s.keys().hasOnly(['eventEditPolicy', 'eventTypes'])
+      return s.keys().hasAll(['eventEditPolicy', 'eventTypes']) && s.keys().hasOnly(['eventEditPolicy', 'eventTypes', 'places'])
+        && validPlaces(s.get('places', []))
         && s.eventEditPolicy in ['admins', 'all'] && s.eventTypes is list && s.eventTypes.size() > 0 && s.eventTypes.size() <= 10
         && (s.eventTypes.size() <= 0 || validType(s.eventTypes[0]))
         && (s.eventTypes.size() <= 1 || validType(s.eventTypes[1]))
@@ -100,9 +126,14 @@ service cloud.firestore {
         && (admin(managementTeam()) || cleanup(managementTeam()))));
       allow list: if false;
       allow create: if signedIn() && u == me() && validProfile(request.resource.data)
-        && request.resource.data.teamId == null && ids(request.resource.data).size() == 0;
+        && request.resource.data.teamId == null && ids(request.resource.data).size() == 0
+        && !request.resource.data.get('deletingAccount', false);
+      allow delete: if signedIn() && u == me() && ids(resource.data).size() == 0
+        && resource.data.teamId == null && resource.data.get('deletingAccount', false)
+        && request.auth.token.auth_time > request.time.toMillis() / 1000 - 300;
       allow update: if signedIn() && validProfile(request.resource.data) && (
         (u == me() && changed().hasOnly(['displayName']))
+        || (u == me() && changed().hasOnly(['deletingAccount']) && request.resource.data.deletingAccount is bool)
         || (u == me() && changed().hasOnly(['teamIds']) && !('teamIds' in resource.data)
           && ids(request.resource.data) == ids(resource.data))
         || (u == me() && changed().hasOnly(['teamId']) && request.resource.data.teamId in ids(resource.data)
@@ -211,7 +242,8 @@ service cloud.firestore {
             && (request.resource.data.nameKey == resource.data.nameKey
               || (!exists(namePath(t, request.resource.data.nameKey)) && !existsAfter(namePath(t, resource.data.nameKey)))))
           || (changed().hasOnly(['holderUid', 'holderName', 'updatedAt']) && (
-            (resource.data.holderUid == null && request.resource.data.holderUid == me() && countChanged(t, me(), 1, i))
+            (resource.data.holderUid == null && request.resource.data.holderUid == me()
+              && !get(userPath(me())).data.get('deletingAccount', false) && countChanged(t, me(), 1, i))
             || (resource.data.holderUid != null && request.resource.data.holderUid == null
               && (resource.data.holderUid == me() || admin(t)) && countChanged(t, resource.data.holderUid, -1, i))
             || (resource.data.holderUid == me() && request.resource.data.holderUid == me())

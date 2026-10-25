@@ -33,12 +33,16 @@ export interface Repository {
     signInWithGoogle(): Promise<void>
     signOut(): Promise<void>
     sendPasswordReset(email: string): Promise<void>
+    /** 本人の再認証後、全所属とプロフィールを整理して認証アカウントを削除 */
+    cancelAccountDeletion(): Promise<void>
+    deleteAccount(input: { confirmation: string; password?: string }): Promise<void>
     /** ログイン中のユーザーに、メールアドレスの確認メールを（再）送信する */
     sendEmailVerification(): Promise<void>
     /** 確認メールのリンクを開いたあと、確認済みかどうかを読み直して onAuthStateChanged に通知する */
     reloadUser(): Promise<void>
   }
   users: {
+    updateAccountName(displayName: string): Promise<void>
     subscribeProfile(uid: string, cb: (profile: UserProfile | null) => void): Unsubscribe
     /** 対象チームの members の表示名と、自分が持っている用具の holderName を更新 */
     updateDisplayName(teamId: string, displayName: string): Promise<void>

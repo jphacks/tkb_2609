@@ -1,6 +1,11 @@
+import { placesError } from '../../lib/places'
 import { eventTypesError } from '../../lib/eventTypes'
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
   GoogleAuthProvider,
   onAuthStateChanged,
   sendEmailVerification,
@@ -58,7 +63,7 @@ const asDate = (value: Timestamp): Date => value?.toDate() ?? new Date()
 const teamIdsFrom = (data: DocumentData): string[] => data.teamIds ?? (data.teamId ? [data.teamId] : [])
 const profileFrom = (s: DocumentSnapshot): UserProfile | null =>
   s.exists()
-    ? { uid: s.id, displayName: s.data().displayName, teamIds: teamIdsFrom(s.data()), teamId: s.data().teamId }
+    ? { deletingAccount: s.data().deletingAccount === true, uid: s.id, displayName: s.data().displayName, teamIds: teamIdsFrom(s.data()), teamId: s.data().teamId }
     : null
 const memberFrom = (s: DocumentSnapshot): Member => ({
   uid: s.id,
@@ -103,7 +108,7 @@ const itemFrom = (s: DocumentSnapshot): EquipmentItem => {
 
 class ChangedPossession extends Error {}
 
-const authUserFrom = (user: User): AuthUser => ({ uid: user.uid, email: user.email || '', emailVerified: user.emailVerified })
+const authUserFrom = (user: User): AuthUser => ({ uid: user.uid, email: user.email || '', emailVerified: user.emailVerified, providers: user.providerData.map((p) => p.providerId) })
 
 // Google のログイン画面（ポップアップ）。リダイレクト方式は iPhone の Safari でストレージの分離により失敗することがある（#31）
 const googleSignInWithPopup = (auth: Auth) => {
@@ -119,9 +124,11 @@ export function createFirestoreRepository(
   auth: Auth,
   db: Firestore,
   // テストでは、ポップアップの代わりにエミュレータ用の資格情報でログインする
-  { googleSignIn = googleSignInWithPopup }: { googleSignIn?: (auth: Auth) => Promise<UserCredential> } = {},
+  { googleSignIn = googleSignInWithPopup, googleReauthenticate = (user) => reauthenticateWithPopup(user, new GoogleAuthProvider()) }: { googleSignIn?: (auth: Auth) => Promise<UserCredential>; googleReauthenticate?: (user: User) => Promise<UserCredential> } = {},
 ): Repository {
   // reload() では onAuthStateChanged が発火しないため、確認状態の更新はここから通知する
+  auth.languageCode = 'ja'
+  let accountDeletionJob: Promise<void> | undefined
   const authListeners = new Set<(user: AuthUser | null) => void>()
   const deletionJobs = new Map<string, Promise<void>>()
   const errors = new Set<(error: RepositoryError) => void>()
@@ -157,6 +164,9 @@ export function createFirestoreRepository(
   }
   // 同じチームの一覧・メンバー・予定が同時に拒否されても、修復は一度にまとめる。
   const membershipRepairs = new Map<string, Promise<boolean>>()
+  // 異なる無効IDも同じプロフィールを書き換える。ルールは最新のresourceで
+  // 対象1件だけの除去を検証するため、並行書き込みによる拒否を避ける。
+  let membershipRepairQueue: Promise<unknown> = Promise.resolve()
   const repairedMemberships = new Set<string>()
   function repairMembership(t: string): Promise<boolean> {
     const user = auth.currentUser
@@ -164,7 +174,7 @@ export function createFirestoreRepository(
     const key = `${user.uid}/${t}`
     const pending = membershipRepairs.get(key)
     if (pending) return pending
-    const task = runTransaction(db, async (tx) => {
+    const task = membershipRepairQueue.then(() => runTransaction(db, async (tx) => {
       if (auth.currentUser !== user) return false
       const profile = await tx.get(userRef(user.uid))
       if (!profile.exists()) return false
@@ -179,10 +189,11 @@ export function createFirestoreRepository(
         membershipChangeTeamId: t,
       })
       return true
-    }).then((repaired) => {
+    })).then((repaired) => {
       if (repaired) repairedMemberships.add(key)
       return repaired
     }).catch(() => false)
+    membershipRepairQueue = task
     membershipRepairs.set(key, task)
     void task.finally(() => membershipRepairs.delete(key))
     return task
@@ -391,8 +402,71 @@ export function createFirestoreRepository(
       }),
       signOut: safe(() => signOut(auth)),
       sendPasswordReset: safe((email) => sendPasswordResetEmail(auth, email.trim())),
+      cancelAccountDeletion: safe(async () => {
+        if (accountDeletionJob) throw new RepositoryError('削除処理が終わるまでお待ちください。')
+        await updateDoc(userRef(uid()), { deletingAccount: false })
+      }),
+      deleteAccount: safe(async ({ confirmation, password }) => {
+        if (confirmation !== '削除') throw new RepositoryError('確認欄に「削除」と入力してください。')
+        const user = auth.currentUser
+        if (!user) throw new RepositoryError('ログインしてください。')
+        if (accountDeletionJob) throw new RepositoryError('アカウント削除を実行中です。')
+        // Google のポップアップは、タップした直後に開始する。
+        const reauth = password && user.providerData.some((p) => p.providerId === 'password')
+          ? reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email!, password))
+          : user.providerData.some((p) => p.providerId === 'google.com')
+            ? googleReauthenticate(user)
+            : Promise.reject(new RepositoryError('現在のパスワードを入力してください。'))
+        const task = (async () => {
+          await reauth
+          const assertUser = () => { if (auth.currentUser !== user) throw new RepositoryError('ログイン状態が変わりました。') }
+          assertUser()
+          const profile = await getDoc(userRef(user.uid))
+          if (profile.exists()) {
+            const ids = teamIdsFrom(profile.data())
+            // 全チームを先に確認し、最後の管理者なら他チームからも離脱しない。
+            for (const t of ids) {
+              let team: DocumentSnapshot
+              try { team = await getDoc(teamRef(t)) } catch (error) {
+                if ((error as { code?: string }).code === 'permission-denied' && await repairMembership(t)) continue
+                throw error
+              }
+              if (!team.exists()) throw new RepositoryError('所属チームの状態を確認できません。再取得してください。')
+              const members = await getDocs(collection(db, 'teams', t, 'members'))
+              const own = members.docs.find((m) => m.id === user.uid)
+              if (own?.data().role === 'admin' && !members.docs.some((m) => m.id !== user.uid && m.data().role === 'admin')) {
+                throw new RepositoryError('最後の管理者になっているチームがあります。他の管理者を任命するか、チームを削除してからやり直してください。')
+              }
+            }
+            assertUser()
+            await updateDoc(profile.ref, { deletingAccount: true })
+            // 別タブの参加・用具取得をルールで止めてから、最新の所属を順に解除する。
+            const latest = await getDoc(profile.ref)
+            for (const t of teamIdsFrom(latest.data()!)) {
+              assertUser()
+              try { await detach(t, user.uid) } catch (error) {
+                if ((error as { code?: string }).code === 'permission-denied' && await repairMembership(t)) continue
+                throw error
+              }
+            }
+            assertUser()
+            // ルールでも未所属・削除中・直近の本人認証を確認する。
+            await deleteDoc(profile.ref)
+          }
+          assertUser()
+          await deleteUser(user)
+        })()
+        accountDeletionJob = task
+        try { await task } finally { accountDeletionJob = undefined }
+      }),
     },
     users: {
+      updateAccountName: safe(async (displayName) => {
+        const user = auth.currentUser
+        if (!user) throw new RepositoryError('ログインしてください。')
+        // アプリでの正本は users.displayName。チーム名・Google 側の名前は変えない。
+        await updateDoc(userRef(user.uid), { displayName: requiredText(displayName, 40) })
+      }),
       subscribeProfile(u, cb) {
         return watchDoc(userRef(u), profileFrom, cb, null)
       },
@@ -612,8 +686,8 @@ export function createFirestoreRepository(
       updateSettings: safe(async (t, settings) => {
         await runTransaction(db, async (tx) => {
           const team = await tx.get(teamRef(t)),
-            next = { ...team.data()!.settings, ...settings }
-          const validation = eventTypesError(next.eventTypes)
+            next = { ...team.data()!.settings, ...settings, ...(settings.places ? { places: settings.places.map((p) => p.trim()) } : {}) }
+          const validation = eventTypesError(next.eventTypes) || placesError(next.places ?? [])
           if (validation) throw new RepositoryError(validation)
           tx.update(team.ref, { settings: next })
         })
