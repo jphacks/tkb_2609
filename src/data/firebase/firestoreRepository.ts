@@ -37,6 +37,7 @@ import {
   type DocumentSnapshot,
   type Firestore,
   type Query,
+  type QuerySnapshot,
 } from 'firebase/firestore'
 import { equipmentNameError, equipmentNameKey } from '../../lib/equipment'
 import { generateJoinCode, normalizeJoinCode } from '../../lib/joinCode'
@@ -45,6 +46,7 @@ import { MAX_WEEKLY_EVENTS } from '../../lib/weekly'
 import type { AuthUser, EquipmentItem, EventInput, EventNote, Member, Team, TeamEvent, UserProfile } from '../../types'
 import { RepositoryError, type Repository, type Unsubscribe } from '../repository'
 import { repositoryError } from './errors'
+import { recoveringSubscription } from './recoveringSubscription'
 
 const requiredText = (value: string, max: number) => {
   const text = value.trim()
@@ -154,8 +156,9 @@ export function createFirestoreRepository(
     })
   }
   function watchDoc<T>(ref: ReturnType<typeof doc>, map: (s: DocumentSnapshot) => T, cb: (data: T) => void, empty: T) {
-    return onSnapshot(
-      ref,
+    return recoveringSubscription<DocumentSnapshot>(
+      auth,
+      (next, error) => onSnapshot(ref, next, error),
       (s) => cb(map(s)),
       (e) => {
         report(e)
@@ -164,8 +167,9 @@ export function createFirestoreRepository(
     )
   }
   function watchList<T>(q: Query<DocumentData>, map: (s: DocumentSnapshot) => T, cb: (data: T[]) => void) {
-    return onSnapshot(
-      q,
+    return recoveringSubscription<QuerySnapshot<DocumentData>>(
+      auth,
+      (next, error) => onSnapshot(q, next, error),
       (s) => cb(s.docs.map(map)),
       (e) => {
         report(e)
