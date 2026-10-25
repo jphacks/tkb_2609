@@ -34,12 +34,11 @@ export function SignUpScreen({ onLogin }: { onLogin(): void }) {
     <div className={styles.screen}>
       <div className={styles.heading}>
         <h1 className={styles.title}>アカウントを作成</h1>
-        <p className="muted">作成後、チームの参加コードを入力します</p>
       </div>
 
       <form className={styles.form} onSubmit={submit}>
         <label className="field">
-          <span className="label">名前（チーム内で表示されます）</span>
+          <span className="label">名前</span>
           <input
             className="input"
             autoComplete="name"
