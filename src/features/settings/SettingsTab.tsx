@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useRepository, useSession, useTeamNavigation } from '../../app/contexts'
+import { useAccountNavigation, useRepository, useSession, useTeamNavigation } from '../../app/contexts'
 import { useFeedback } from '../../components/feedback/context'
 import { isMock, resetMockData } from '../../data'
 import { AdminSettings, DeleteTeamSection } from './AdminSettings'
@@ -11,6 +11,7 @@ export function SettingsTab() {
   const { team, user, me, members, isAdmin } = useSession()
   const { run, confirm } = useFeedback()
   const navigation = useTeamNavigation()
+  const openAccount = useAccountNavigation()
   const isLastAdmin = isAdmin && members.filter((m) => m.role === 'admin').length <= 1
 
   const signOut = async () => {
@@ -127,6 +128,7 @@ export function SettingsTab() {
       <section className={styles.section}>
         <h2 className="section-title">アカウント</h2>
         <div className={styles.accountActions}>
+          {openAccount && <button className="btn btn-secondary btn-block" onClick={openAccount}>アカウント設定</button>}
           <button className="btn btn-secondary btn-block" onClick={signOut}>
             ログアウト
           </button>

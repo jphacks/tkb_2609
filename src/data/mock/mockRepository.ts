@@ -1,3 +1,4 @@
+import { placesError } from '../../lib/places'
 import { eventTypesError } from '../../lib/eventTypes'
 // メモリ上で動くモック実装。localStorage に保存するので、リロードしてもデータとログイン状態が残る。
 // 権限チェックは Firestore セキュリティルールで行う予定の内容（docs/data-model.md）と揃えている。
@@ -98,6 +99,7 @@ export function createMockRepository(): Repository & { reset(): void } {
   window.addEventListener('storage', (e) => {
     if (e.key === DB_KEY) {
       db = loadDb()
+      if (currentUid && !db.accounts[currentUid]) setSession(null)
       notify()
     }
   })
@@ -212,11 +214,28 @@ export function createMockRepository(): Repository & { reset(): void } {
     },
 
     auth: {
+      async cancelAccountDeletion() {
+        db.users[requireUid()].deletingAccount = false
+        commit()
+      },
+      async deleteAccount({ confirmation, password }) {
+        const uid = requireUid(), account = db.accounts[uid]
+        if (confirmation !== '削除') throw new RepositoryError('確認欄に「削除」と入力してください。')
+        if (account.email !== MOCK_GOOGLE_ACCOUNT.email && password !== account.password) throw new RepositoryError('パスワードが正しくありません。')
+        await sleep(LATENCY_MS)
+        const teams = Object.values(db.teams).filter((t) => !!t.members[uid])
+        if (teams.some((t) => t.members[uid].role === 'admin' && adminCount(t) <= 1)) throw new RepositoryError('最後の管理者になっているチームがあります。他の管理者を任命するか、チームを削除してからやり直してください。')
+        teams.forEach((t) => detachMember(t, uid))
+        delete db.users[uid]
+        delete db.accounts[uid]
+        setSession(null)
+        commit()
+      },
       onAuthStateChanged(cb) {
         const listener = (uid: string | null) => {
           const account = uid ? db.accounts[uid] : undefined
           // モックではメールを送れないため、すべて確認済みとして扱う
-          cb(account ? { uid: account.uid, email: account.email, emailVerified: true } : null)
+          cb(account ? { uid: account.uid, email: account.email, emailVerified: true, providers: [account.email === MOCK_GOOGLE_ACCOUNT.email ? 'google.com' : 'password'] } : null)
         }
         authListeners.add(listener)
         listener(currentUid)
@@ -279,6 +298,12 @@ export function createMockRepository(): Repository & { reset(): void } {
     },
 
     users: {
+      async updateAccountName(displayName) {
+        const uid = requireUid(), name = displayName.trim()
+        if (!name || name.length > 40) throw new RepositoryError('名前は1〜40文字で入力してください。')
+        db.users[uid].displayName = name
+        commit()
+      },
       subscribeProfile(uid, cb) {
         return watch<UserProfile | null>(() => {
           const user = db.users[uid]
@@ -410,8 +435,8 @@ export function createMockRepository(): Repository & { reset(): void } {
       async updateSettings(teamId, settings) {
         await sleep(LATENCY_MS)
         const { team } = requireAdmin(teamId)
-        const next = { ...team.settings, ...settings }
-        const validation = eventTypesError(next.eventTypes)
+        const next = { ...team.settings, ...settings, ...(settings.places ? { places: settings.places.map((p) => p.trim()) } : {}) }
+        const validation = eventTypesError(next.eventTypes) || placesError(next.places ?? [])
         if (validation) throw new RepositoryError(validation)
         team.settings = next
         commit()

@@ -168,6 +168,15 @@ export function EventForm({ event, onDone }: { event?: TeamEvent; onDone(eventId
           </div>
         )}
 
+        {!!team.settings.places?.length && (
+          <label className="field">
+            <span className="label">よく使う場所から選ぶ</span>
+            <select className="input" value="" onChange={(e) => setPlace(e.target.value)}>
+              <option value="">登録した場所を選択</option>
+              {team.settings.places.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </label>
+        )}
         <label className="field">
           <span className="label">場所（任意）</span>
           <input

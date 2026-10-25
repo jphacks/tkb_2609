@@ -6,11 +6,12 @@ import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen'
 import { LandingScreen } from '../features/landing/LandingScreen'
 import { initialAuthMode, rememberSignedIn, removeSharedLinkParams } from '../lib/entry'
 import type { AuthUser, Member, Team, UserProfile } from '../types'
-import { canSwitchTeam, SessionContext, TeamNavigationContext, useRefresh, useRepository, useTeamNavigation, type Session, type TeamNavigation } from './contexts'
+import { AccountNavigationContext, canSwitchTeam, SessionContext, TeamNavigationContext, useRefresh, useRepository, useTeamNavigation, type Session, type TeamNavigation } from './contexts'
 import { MainShell, type TabId } from './MainShell'
 import { useFeedback } from '../components/feedback/context'
 import { Splash } from './Splash'
 import styles from './app.module.css'
+import { AccountSettings } from '../features/settings/AccountSettings'
 import { TeamSelect } from './TeamSelect'
 import { useSubscription } from './useSubscription'
 
@@ -57,6 +58,7 @@ function SignedIn({ user }: { user: AuthUser }) {
 
   const teams = useSubscription<Team[]>((cb) => repo.teams.subscribeMine(cb), [user.uid])
   const [adding, setAdding] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
   // 表示中のタブ。チームを切り替えても、設定タブの「チームを追加」から戻っても、同じタブを開く（#59）
   const [tab, setTab] = useState<TabId>('schedule')
   const { run } = useFeedback()
@@ -69,13 +71,24 @@ function SignedIn({ user }: { user: AuthUser }) {
     [repo, teams, run],
   )
   if (profile === undefined || teams === undefined) return <Splash />
-  if (profile === null) return <ConnectionIssue />
-  // 2回目以降のログインでは teamId がわかるので、参加コードの入力は不要
-  if (!profile.teamId || adding) return <TeamEntryScreen profile={profile} onDone={profile.teamId ? () => setAdding(false) : undefined} />
+  if (accountOpen || profile?.deletingAccount) {
+    return <AccountSettings user={user} profile={profile} onBack={profile && !profile.deletingAccount ? () => setAccountOpen(false) : undefined} />
+  }
+  if (profile === null) return <ConnectionIssue onAccountSettings={() => setAccountOpen(true)} />
+  // 未所属でもアカウント名の変更・削除を利用できる。
+  if (!profile.teamId || adding) {
+    return (
+      <AccountNavigationContext.Provider value={() => setAccountOpen(true)}>
+        <TeamEntryScreen profile={profile} onDone={profile.teamId ? () => setAdding(false) : undefined} />
+      </AccountNavigationContext.Provider>
+    )
+  }
   return (
-    <TeamNavigationContext.Provider value={navigation}>
-      <TeamSession key={profile.teamId} user={user} profile={profile} teamId={profile.teamId} tab={tab} onTabChange={setTab} />
-    </TeamNavigationContext.Provider>
+    <AccountNavigationContext.Provider value={() => setAccountOpen(true)}>
+      <TeamNavigationContext.Provider value={navigation}>
+        <TeamSession key={profile.teamId} user={user} profile={profile} teamId={profile.teamId} tab={tab} onTabChange={setTab} />
+      </TeamNavigationContext.Provider>
+    </AccountNavigationContext.Provider>
   )
 }
 
@@ -122,7 +135,7 @@ function TeamSession({
   )
 }
 
-function ConnectionIssue({ teamId }: { teamId?: string }) {
+function ConnectionIssue({ teamId, onAccountSettings }: { teamId?: string; onAccountSettings?: () => void }) {
   const repo = useRepository()
   const { refresh } = useRefresh()
   return (
@@ -140,6 +153,7 @@ function ConnectionIssue({ teamId }: { teamId?: string }) {
       >
         ログアウト
       </button>
+      {onAccountSettings && <button className="btn btn-secondary" onClick={onAccountSettings}>アカウント設定</button>}
       {teamId && <OtherTeams teamId={teamId} />}
     </main>
   )

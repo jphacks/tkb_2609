@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useRepository } from '../../app/contexts'
+import { useAccountNavigation, useRepository } from '../../app/contexts'
 import { useFeedback } from '../../components/feedback/context'
 import { RepositoryError } from '../../data/repository'
 import { JOIN_CODE_LENGTH, normalizeJoinCode } from '../../lib/joinCode'
@@ -9,6 +9,7 @@ import styles from './auth.module.css'
 /** チームに未所属のユーザー向け。参加コードで参加するか、チームを作る */
 export function TeamEntryScreen({ profile, onDone }: { profile: UserProfile; onDone?: () => void }) {
   const repo = useRepository()
+  const openAccount = useAccountNavigation()
   const { run } = useFeedback()
   const [mode, setMode] = useState<'join' | 'create'>('join')
   const [displayName, setDisplayName] = useState('')
@@ -91,6 +92,7 @@ export function TeamEntryScreen({ profile, onDone }: { profile: UserProfile; onD
       </form>
 
       <div className={styles.switch}>
+        {openAccount && <button className="btn btn-secondary btn-block" onClick={openAccount}>アカウント設定</button>}
         {onDone && <button className="btn btn-secondary btn-block" disabled={busy} onClick={onDone}>戻る</button>}
         <button className="btn btn-ghost btn-sm" onClick={() => run(() => repo.auth.signOut())}>
           ログアウト

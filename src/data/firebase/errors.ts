@@ -7,6 +7,9 @@ export function repositoryError(error: unknown): RepositoryError {
       'permission-denied': 'この操作は許可されていません。権限とチームへの所属を確認してください。',
       unavailable: '接続できません。通信状態を確認して、もう一度お試しください。',
       'not-found': 'データが見つかりません。再取得してください。',
+      'auth/requires-recent-login': '本人確認の有効期限が切れました。再認証して削除を再開してください。',
+      'auth/user-mismatch': '登録したアカウントと異なります。同じアカウントで本人確認してください。',
+      'auth/popup-closed-by-user': '本人確認が中止されました。',
       'auth/invalid-credential': 'メールアドレスまたはパスワードが正しくありません。',
       'auth/invalid-email': 'メールアドレスを確認してください。',
       'auth/email-already-in-use':
