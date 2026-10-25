@@ -51,6 +51,8 @@ if (!useEmulator && !config.apiKey) {
 }
 
 export const app = initializeApp(config)
+// 保存先は全ログイン経路で getAuth の既定に統一する（#64）。
+// メールログインだけ localStorage に変えると、新しいタブの IndexedDB 移行で既存タブがログアウトする。
 export const auth = getAuth(app)
 // 本番では端末内（IndexedDB）にキャッシュし、起動直後や再接続時の表示と読み取り回数を抑える（Issue #11）。
 // 複数タブで開いても同じキャッシュを共有する。エミュレータでは毎回まっさらな状態で試せるようメモリのみ

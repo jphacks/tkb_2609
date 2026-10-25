@@ -1,12 +1,10 @@
 import { eventTypesError } from '../../lib/eventTypes'
 import {
-  browserLocalPersistence,
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   onAuthStateChanged,
   sendEmailVerification,
   sendPasswordResetEmail,
-  setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -303,7 +301,6 @@ export function createFirestoreRepository(
       signUp: safe(async ({ email, password, displayName }) => {
         const name = requiredText(displayName, 40)
         if (!isStrongPassword(password)) throw new RepositoryError('パスワードの条件を満たしてください。')
-        await setPersistence(auth, browserLocalPersistence)
         const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password)
         await updateProfile(user, { displayName: name })
         await ensureProfile(user)
@@ -324,7 +321,6 @@ export function createFirestoreRepository(
         authListeners.forEach((cb) => cb(authUserFrom(user)))
       }),
       signIn: safe(async (email, password) => {
-        await setPersistence(auth, browserLocalPersistence)
         const { user } = await signInWithEmailAndPassword(auth, email.trim(), password)
         await ensureProfile(user)
       }),
