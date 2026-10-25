@@ -2,6 +2,7 @@ import { AppLogo } from '../../components/AppLogo'
 import { useState, type FormEvent } from 'react'
 import { useRepository } from '../../app/contexts'
 import { useFeedback } from '../../components/feedback/context'
+import { BackIcon } from '../../components/icons'
 import { isMock } from '../../data'
 import { MOCK_ACCOUNTS, MOCK_PASSWORD } from '../../data/mock/seed'
 import { RepositoryError } from '../../data/repository'
@@ -9,7 +10,7 @@ import { PasswordInput } from '../../components/PasswordInput'
 import styles from './auth.module.css'
 import { GoogleSignIn } from './GoogleSignIn'
 
-export function LoginScreen({ onSignUp }: { onSignUp(): void }) {
+export function LoginScreen({ onSignUp, onBack }: { onSignUp(): void; onBack?(): void }) {
   const repo = useRepository()
   const { run, confirm } = useFeedback()
   const [email, setEmail] = useState('')
@@ -40,6 +41,12 @@ export function LoginScreen({ onSignUp }: { onSignUp(): void }) {
 
   return (
     <div className={styles.screen}>
+      {onBack && (
+        <button type="button" className={`btn btn-ghost btn-sm ${styles.backLink}`} onClick={onBack}>
+          <BackIcon size={18} />
+          トップへ戻る
+        </button>
+      )}
       <div className={styles.brand}>
         <AppLogo size={52} />
         <h1 className={styles.appName}>BUKATSU</h1>
