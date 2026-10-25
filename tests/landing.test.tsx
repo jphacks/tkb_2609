@@ -130,19 +130,67 @@ describe('landing page before sign-in (#73)', () => {
   })
 })
 
-// #79：管理者が共有したリンク（?openExternalBrowser=1）から開いたときは、紹介ページを飛ばしてログイン画面から始める
-describe('shared link opens the login screen (#79)', () => {
-  it('shows the login screen first and can still go back to the landing page', async () => {
-    history.replaceState(null, '', '/?openExternalBrowser=1')
+// #87：一度ログインしたことがある人・チームのリンクから来た人はログイン画面、新規の人は紹介ページから始める
+describe('first screen when signed out (#87)', () => {
+  const landingHeading = () => screen.queryByRole('heading', { name: '予定と出欠、用具の所在を、チームでひとつに。' })
+
+  it.each([['/?invite=1&openExternalBrowser=1'], ['/?openExternalBrowser=1']])(
+    'starts at the login screen from a team link (%s) and removes the parameters from the address bar',
+    async (path) => {
+      history.replaceState(null, '', `${path}#top`)
+      const h = harness()
+      const user = userEvent.setup()
+
+      render(<App />, { wrapper: h.wrapper })
+
+      expect(await screen.findByLabelText('メールアドレス')).toBeTruthy()
+      expect(landingHeading()).toBeNull()
+      // URL をコピーして共有しても、ほかの人がログイン画面にならない
+      expect(location.search).toBe('')
+      expect(location.hash).toBe('#top')
+
+      await user.click(screen.getByRole('button', { name: 'トップへ戻る' }))
+      expect(landingHeading()).toBeTruthy()
+    },
+  )
+
+  it('keeps unrelated parameters', async () => {
+    history.replaceState(null, '', '/?invite=1&utm_source=test')
+    render(<App />, { wrapper: harness().wrapper })
+    expect(await screen.findByLabelText('メールアドレス')).toBeTruthy()
+    expect(location.search).toBe('?utm_source=test')
+  })
+
+  it('shows the landing page to a new visitor, and the login screen after signing in once on this device', async () => {
     const h = harness()
     const user = userEvent.setup()
 
-    render(<App />, { wrapper: h.wrapper })
+    const first = render(<App />, { wrapper: h.wrapper })
+    expect(await screen.findByRole('heading', { name: '予定と出欠、用具の所在を、チームでひとつに。' })).toBeTruthy()
 
+    // ログインしてからログアウトすると、紹介ページではなくログイン画面に戻る
+    await h.repo.auth.signIn(MOCK_ACCOUNTS[0].email, MOCK_PASSWORD)
+    expect(await screen.findByRole('heading', { name: 'サンプルチーム' })).toBeTruthy()
+    await h.repo.auth.signOut()
     expect(await screen.findByLabelText('メールアドレス')).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: '予定と出欠、用具の所在を、チームでひとつに。' })).toBeNull()
+    first.unmount()
 
+    // 次に開いたときも、ログイン画面から始まる
+    render(<App />, { wrapper: h.wrapper })
+    expect(await screen.findByLabelText('メールアドレス')).toBeTruthy()
+    expect(landingHeading()).toBeNull()
     await user.click(screen.getByRole('button', { name: 'トップへ戻る' }))
-    expect(screen.getByRole('heading', { name: '予定と出欠、用具の所在を、チームでひとつに。' })).toBeTruthy()
+    expect(landingHeading()).toBeTruthy()
+  })
+
+  it('treats the visitor as new when localStorage is unavailable', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    render(<App />, { wrapper: harness().wrapper })
+    expect(await screen.findByRole('heading', { name: '予定と出欠、用具の所在を、チームでひとつに。' })).toBeTruthy()
   })
 })

@@ -16,11 +16,3 @@ export function externalBrowserUrl(href: string): string {
   url.searchParams.set('openExternalBrowser', '1')
   return url.toString()
 }
-
-/**
- * 管理者が共有したアプリのリンク（設定タブ、#56）から開いたか。共有するリンクには `openExternalBrowser=1` が付く。
- * すでにチームに誘われているメンバーなので、紹介ページではなくログイン画面から始める（#79）
- */
-export function isSharedLink(href: string): boolean {
-  return new URL(href).searchParams.has('openExternalBrowser')
-}

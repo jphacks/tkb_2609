@@ -201,7 +201,7 @@ describe('settings UI', () => {
     // 「LINE で共有」はなく、参加コードの上にアプリのリンクの欄がある（#56）
     expect(screen.queryByRole('link', { name: /送る|LINE/ })).toBeNull()
     const link = screen.getByLabelText('アプリのリンク') as HTMLInputElement
-    expect(link.value).toBe(`${location.origin}/?openExternalBrowser=1`)
+    expect(link.value).toBe(`${location.origin}/?invite=1&openExternalBrowser=1`)
     expect(link.compareDocumentPosition(screen.getByLabelText('参加コード')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // 読み取れない・コードがない場合は、取得中のままにせず再発行できるようにする。リンクはそのまま表示する
     codes.emit(null)
@@ -211,7 +211,7 @@ describe('settings UI', () => {
     codes.emit('K7MPX2QA')
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => {}) } })
     await user.click(screen.getByRole('button', { name: 'アプリのリンクをコピー' }))
-    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(`${location.origin}/?openExternalBrowser=1`)
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(`${location.origin}/?invite=1&openExternalBrowser=1`)
     expect(h.feedback.toast).toHaveBeenLastCalledWith('アプリのリンクをコピーしました')
     await user.click(screen.getByRole('button', { name: '参加コードをコピー' }))
     expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith('K7MPX2QA')

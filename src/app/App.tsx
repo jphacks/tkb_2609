@@ -4,7 +4,7 @@ import { SignUpScreen } from '../features/auth/SignUpScreen'
 import { TeamEntryScreen } from '../features/auth/TeamEntryScreen'
 import { VerifyEmailScreen } from '../features/auth/VerifyEmailScreen'
 import { LandingScreen } from '../features/landing/LandingScreen'
-import { isSharedLink } from '../lib/inAppBrowser'
+import { initialAuthMode, rememberSignedIn, removeSharedLinkParams } from '../lib/entry'
 import type { AuthUser, Member, Team, UserProfile } from '../types'
 import { canSwitchTeam, SessionContext, TeamNavigationContext, useRefresh, useRepository, useTeamNavigation, type Session, type TeamNavigation } from './contexts'
 import { MainShell, type TabId } from './MainShell'
@@ -18,10 +18,22 @@ import { useSubscription } from './useSubscription'
 export function App() {
   const repo = useRepository()
   const [user, setUser] = useState<AuthUser | null>()
-  // 共有されたリンクから開いたときは、紹介ページを飛ばしてログイン画面から始める（#79）
-  const [authMode, setAuthMode] = useState<'landing' | 'login' | 'signup'>(() => (isSharedLink(location.href) ? 'login' : 'landing'))
+  // 一度ログインしたことがある人・チームのリンクから来た人はログイン画面、新規の人は紹介ページから始める（#87）
+  const [authMode, setAuthMode] = useState<'landing' | 'login' | 'signup'>(() => initialAuthMode(location.href))
 
-  useEffect(() => repo.auth.onAuthStateChanged(setUser), [repo])
+  useEffect(removeSharedLinkParams, [])
+  useEffect(
+    () =>
+      repo.auth.onAuthStateChanged((u) => {
+        // ログインしたら印を残し、ログアウト後はログイン画面に戻す
+        if (u) {
+          rememberSignedIn()
+          setAuthMode('login')
+        }
+        setUser(u)
+      }),
+    [repo],
+  )
 
   if (user === undefined) return <Splash />
   if (user === null) {
