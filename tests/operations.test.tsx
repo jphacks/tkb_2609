@@ -11,9 +11,10 @@ import { createMockRepository } from '../src/data/mock/mockRepository'
 import { LoginScreen } from '../src/features/auth/LoginScreen'
 import { SignUpScreen } from '../src/features/auth/SignUpScreen'
 import { EquipmentTab } from '../src/features/equipment/EquipmentTab'
+import { EventForm } from '../src/features/schedule/EventForm'
 import { MyItemsWidget } from '../src/features/equipment/MyItemsWidget'
 import { SettingsTab } from '../src/features/settings/SettingsTab'
-import type { EquipmentItem } from '../src/types'
+import type { EquipmentItem, EventInput } from '../src/types'
 vi.mock('../src/data', () => ({ isMock: false, resetMockData: vi.fn() }))
 afterEach(() => {
   cleanup()
@@ -377,6 +378,49 @@ describe('settings and equipment writes', () => {
     await user.click(screen.getByRole('button', { name: '管理者にする' }))
     expect(h.feedback.confirm).toHaveBeenCalled()
     expect(h.repo.teams.setRole).toHaveBeenCalledWith('team', 'member', 'admin')
+  })
+})
+
+describe('weekly events (#44)', () => {
+  it('previews the dates and adds them all at once, then returns to the list', async () => {
+    const h = harness(),
+      user = userEvent.setup(),
+      onDone = vi.fn()
+    h.repo.events.createMany = vi.fn(async (_t: string, inputs: EventInput[]) => inputs.map((_, i) => `e${i}`))
+    h.repo.events.create = vi.fn(async () => 'single')
+    render(<EventForm onDone={onDone} />, { wrapper: h.wrapper })
+    await user.click(screen.getByRole('radio', { name: '毎週' }))
+    expect(screen.queryByText('メモ（任意）')).toBeNull()
+    await user.type(screen.getByRole('textbox', { name: '予定名' }), '練習')
+    fireEvent.change(screen.getByLabelText('開始日'), { target: { value: '2026-10-27' } })
+    fireEvent.change(screen.getByLabelText('終了日'), { target: { value: '2026-11-10' } })
+    fireEvent.change(screen.getByLabelText('集合時間'), { target: { value: '17:00' } })
+    // 初期値の今日の曜日を外し、火曜と木曜にする
+    for (const button of within(screen.getByRole('group', { name: '曜日' })).getAllByRole('button'))
+      if (button.getAttribute('aria-pressed') === 'true') await user.click(button)
+    await user.click(screen.getByRole('button', { name: '火' }))
+    await user.click(screen.getByRole('button', { name: '木' }))
+    const dates = within(screen.getByRole('list', { name: '追加される日付' })).getAllByRole('listitem')
+    expect(dates.map((d) => d.textContent)).toEqual(['10/27(火)', '10/29(木)', '11/3(火)', '11/5(木)', '11/10(火)'])
+    await user.click(screen.getByRole('button', { name: '5件の予定を追加する' }))
+    expect(h.repo.events.create).not.toHaveBeenCalled()
+    const inputs = vi.mocked(h.repo.events.createMany).mock.calls[0][1]
+    expect(inputs).toHaveLength(5)
+    expect(inputs[0]).toEqual({ typeId: 'practice', title: '練習', place: null, startAt: new Date(2026, 9, 27, 17, 0) })
+    expect(h.feedback.run).toHaveBeenCalledWith(expect.any(Function), '5件の予定を追加しました')
+    expect(onDone).toHaveBeenCalledWith()
+  })
+
+  it('refuses more than 52 dates', async () => {
+    const h = harness(),
+      user = userEvent.setup()
+    render(<EventForm onDone={vi.fn()} />, { wrapper: h.wrapper })
+    await user.click(screen.getByRole('radio', { name: '毎週' }))
+    await user.type(screen.getByRole('textbox', { name: '予定名' }), '練習')
+    fireEvent.change(screen.getByLabelText('開始日'), { target: { value: '2026-10-27' } })
+    fireEvent.change(screen.getByLabelText('終了日'), { target: { value: '2027-12-31' } })
+    expect(screen.getByText(/52件までです/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: '追加する' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
 

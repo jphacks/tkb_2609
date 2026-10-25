@@ -350,3 +350,79 @@
     background-position: -200% 0;
   }
 }
+
+/* ---------- 毎週の予定の一括追加（#44） ---------- */
+
+.segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.segment button {
+  min-height: 40px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.segment button[aria-checked='true'] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+/* 7つの曜日を1行に収める。狭い画面でも押しやすいよう、幅は均等に分ける */
+.weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.weekday {
+  min-height: 44px;
+  padding: 0;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-weight: 700;
+  color: var(--text-sub);
+}
+
+.weekday[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.weeklyDates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 168px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.weeklyDates li {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-weak);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.weeklyError {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger);
+}

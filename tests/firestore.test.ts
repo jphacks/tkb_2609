@@ -515,6 +515,32 @@ describe('additional consistency guarantees', () => {
       )?.teamId,
     ).toBe(t)
   })
+  it('creates up to 52 weekly events in one batch and enforces the edit policy (#44)', async () => {
+    const a = await client(),
+      t = await a.teams.create('毎週チーム', 'テスト'),
+      b = await client()
+    await b.teams.join(await a.teams.getJoinCode(t), 'テスト')
+    const start = new Date()
+    start.setDate(start.getDate() + 1)
+    const inputs = Array.from({ length: 52 }, (_, i) => {
+      const startAt = new Date(start)
+      startAt.setDate(startAt.getDate() + 7 * i)
+      return { title: '毎週の練習', typeId: 'practice', startAt, place: '体育館' }
+    })
+    const ids = await a.events.createMany(t, inputs)
+    expect(ids).toHaveLength(52)
+    const events = await waitFor<TeamEvent[]>(
+      (cb) => a.events.subscribeUpcoming(t, cb),
+      (e) => e.length === 52,
+    )
+    expect(events.map((e) => e.id)).toEqual(ids)
+    expect(events.every((e) => e.title === '毎週の練習' && e.place === '体育館')).toBe(true)
+    await expect(a.events.createMany(t, [...inputs, inputs[0]])).rejects.toThrow('52件まで')
+    await expect(a.events.createMany(t, [])).rejects.toThrow()
+    await expect(b.events.createMany(t, inputs.slice(0, 2))).rejects.toThrow()
+    await a.teams.updateSettings(t, { eventEditPolicy: 'all' })
+    expect(await b.events.createMany(t, inputs.slice(0, 2))).toHaveLength(2)
+  })
   it('cleans up more than one batch of notes and can retry deletion', async () => {
     const r = await client(),
       t = await r.teams.create('大量メモチーム', 'テスト')
