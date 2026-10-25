@@ -5,6 +5,7 @@ import { eventTypesError } from '../../lib/eventTypes'
 
 import { equipmentNameError, isDuplicateEquipmentName } from '../../lib/equipment'
 import { generateJoinCode, normalizeJoinCode } from '../../lib/joinCode'
+import { MAX_WEEKLY_EVENTS } from '../../lib/weekly'
 import type { EquipmentItem, EventNote, Member, Team, TeamEvent, UserProfile } from '../../types'
 import { RepositoryError, type Repository, type Unsubscribe } from '../repository'
 import { createSeed, MOCK_GOOGLE_ACCOUNT } from './seed'
@@ -495,6 +496,20 @@ export function createMockRepository(): Repository & { reset(): void } {
         }
         commit()
         return id
+      },
+
+      async createMany(teamId, inputs) {
+        await sleep(LATENCY_MS)
+        if (inputs.length === 0 || inputs.length > MAX_WEEKLY_EVENTS)
+          throw new RepositoryError(`一度に追加できる予定は${MAX_WEEKLY_EVENTS}件までです`)
+        const { uid, team } = requireEventEditor(teamId)
+        const ids = inputs.map((input) => {
+          const id = newId()
+          team.events[id] = { id, ...input, attendance: {}, createdBy: uid, updatedAt: new Date(), notes: {} }
+          return id
+        })
+        commit()
+        return ids
       },
 
       async update(teamId, eventId, input) {

@@ -43,6 +43,7 @@ import {
 import { equipmentNameError, equipmentNameKey } from '../../lib/equipment'
 import { generateJoinCode, normalizeJoinCode } from '../../lib/joinCode'
 import { isStrongPassword } from '../../lib/password'
+import { MAX_WEEKLY_EVENTS } from '../../lib/weekly'
 import type { AuthUser, EquipmentItem, EventInput, EventNote, Member, Team, TeamEvent, UserProfile } from '../../types'
 import { RepositoryError, type Repository, type Unsubscribe } from '../repository'
 import { repositoryError } from './errors'
@@ -653,6 +654,20 @@ export function createFirestoreRepository(
         }
         await batch.commit()
         return ref.id
+      }),
+      createMany: safe(async (t, inputs) => {
+        if (inputs.length === 0 || inputs.length > MAX_WEEKLY_EVENTS)
+          throw new RepositoryError(`一度に追加できる予定は${MAX_WEEKLY_EVENTS}件までです。`)
+        const team = await ensureEditor(t),
+          u = uid(),
+          batch = writeBatch(db)
+        const refs = inputs.map((input) => {
+          const ref = doc(collection(db, 'teams', t, 'events'))
+          batch.set(ref, { ...eventData(input, team), attendance: {}, createdBy: u })
+          return ref
+        })
+        await batch.commit()
+        return refs.map((ref) => ref.id)
       }),
       update: safe(async (t, e, input) => {
         const team = await ensureEditor(t)

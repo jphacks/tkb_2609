@@ -75,6 +75,8 @@ export interface Repository {
     /** 今日以降の予定を近い順に */
     subscribeUpcoming(teamId: string, cb: (events: TeamEvent[]) => void): Unsubscribe
     create(teamId: string, input: EventInput, initialNote?: string): Promise<string>
+    /** 毎週の予定などをまとめて追加する（1〜52件）。すべて成功するか、すべて失敗する */
+    createMany(teamId: string, inputs: EventInput[]): Promise<string[]>
     update(teamId: string, eventId: string, input: EventInput): Promise<void>
     remove(teamId: string, eventId: string): Promise<void>
     /** 自分の出欠のみ。'present' を渡すとキーを削除する */
