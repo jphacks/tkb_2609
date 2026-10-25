@@ -27,7 +27,7 @@ repo.auth.onAuthStateChanged((user) => {
   history.append(item)
 })
 const operations: Record<string, () => Promise<void>> = {
-  signup: () => repo.auth.signUp({email:'issue64-browser@example.invalid', password:'Example123!', displayName:'Tab Test'}),
+  signup: () => repo.auth.signUp({ email: 'issue64-browser@example.invalid', password: 'Example123!', displayName: 'Tab Test' }),
   email: () => repo.auth.signIn('issue64-browser@example.invalid', 'Example123!'),
   google: () => repo.auth.signInWithGoogle(),
   logout: () => repo.auth.signOut(),
@@ -37,7 +37,12 @@ for (const [id, operation] of Object.entries(operations)) {
   button.addEventListener('click', async () => {
     button.disabled = true
     error.textContent = ''
-    try { await operation() } catch (e) { error.textContent = e instanceof Error ? e.message : 'テスト失敗' }
-    finally { button.disabled = false }
+    try {
+      await operation()
+    } catch (e) {
+      error.textContent = e instanceof Error ? e.message : 'テスト失敗'
+    } finally {
+      button.disabled = false
+    }
   })
 }
