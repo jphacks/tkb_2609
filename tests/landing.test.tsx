@@ -16,6 +16,7 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   localStorage.clear()
+  history.replaceState(null, '', '/')
 })
 
 function harness() {
@@ -126,5 +127,22 @@ describe('landing page before sign-in (#73)', () => {
     expect(
       screen.queryByRole('heading', { name: '予定と出欠、用具の所在を、チームでひとつに。' }),
     ).toBeNull()
+  })
+})
+
+// #79：管理者が共有したリンク（?openExternalBrowser=1）から開いたときは、紹介ページを飛ばしてログイン画面から始める
+describe('shared link opens the login screen (#79)', () => {
+  it('shows the login screen first and can still go back to the landing page', async () => {
+    history.replaceState(null, '', '/?openExternalBrowser=1')
+    const h = harness()
+    const user = userEvent.setup()
+
+    render(<App />, { wrapper: h.wrapper })
+
+    expect(await screen.findByLabelText('メールアドレス')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: '予定と出欠、用具の所在を、チームでひとつに。' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'トップへ戻る' }))
+    expect(screen.getByRole('heading', { name: '予定と出欠、用具の所在を、チームでひとつに。' })).toBeTruthy()
   })
 })
