@@ -1,0 +1,46 @@
+{
+  "environment": {
+    "node": "v24.19.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "measuredAt": "2026-10-26T00:01:08.214Z",
+  "measurements": [
+    {
+      "phase": "memberRemoval.interruptedAfter50Items",
+      "ms": 720.1001669999999,
+      "counts": {
+        "reads": 202,
+        "queries": 2,
+        "emptyQueries": 0,
+        "txReads": 150,
+        "sets": 0,
+        "updates": 101,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 100,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "memberRemoval.resumedRemaining50Items",
+      "ms": 535.0317499999999,
+      "counts": {
+        "reads": 152,
+        "queries": 2,
+        "emptyQueries": 0,
+        "txReads": 153,
+        "sets": 0,
+        "updates": 102,
+        "deletes": 1,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 100,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    }
+  ]
+}
