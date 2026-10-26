@@ -5,7 +5,7 @@ import { EquipmentTab } from '../features/equipment/EquipmentTab'
 import { ScheduleTab } from '../features/schedule/ScheduleTab'
 import { SettingsTab } from '../features/settings/SettingsTab'
 import styles from './app.module.css'
-import { canSwitchTeam, useSession, useTeamNavigation } from './contexts'
+import { canOpenTeamMenu, useSession, useTeamNavigation } from './contexts'
 import { TeamSelect } from './TeamSelect'
 
 export type TabId = 'schedule' | 'equipment' | 'settings'
@@ -25,11 +25,11 @@ export function MainShell({ tab, onTabChange: setTab }: { tab: TabId; onTabChang
   return (
     <div className={styles.shell}>
       <div className={styles.headerArea}>
-        {/* 2チーム以上に所属しているときは、チーム名の位置で切り替える（#59） */}
+        {/* 所属が1件でも、チーム名から参加・作成を開ける（#112）。 */}
         <PageHeader
           title={team.name}
           titleControl={
-            canSwitchTeam(navigation, team.id) ? (
+            canOpenTeamMenu(navigation, team.id) ? (
               <TeamSelect teamId={team.id} teamName={team.name} variant="header" />
             ) : undefined
           }

@@ -566,20 +566,20 @@ describe('password visibility toggle (#33)', () => {
 
 // #59：チームの切り替えはヘッダーのチーム名の位置で行い、追加は設定タブから行う
 describe('team switching in the header (#59)', () => {
-  it('shows only the name with one team, a selector with two, and opens team entry from the settings tab', async () => {
+  it('shows a selector with one or more teams and keeps the settings entry', async () => {
     const h = harness()
     const user = userEvent.setup()
     await h.repo.auth.signIn('admin@example.com', 'Bukatsu#2026')
     render(<App />, { wrapper: h.wrapper })
     const header = await screen.findByRole('banner')
-    expect(await within(header).findByRole('heading', { name: 'サンプルチーム' })).toBeTruthy()
+    expect((await within(header).findByRole('combobox', { name: '表示するチーム' }) as HTMLSelectElement).selectedOptions[0].text).toBe('サンプルチーム')
     // 上の段（「表示するチーム」の見出しと「チームを追加」）はない
     expect(screen.queryByText('表示するチーム')).toBeNull()
     expect(screen.queryByRole('button', { name: 'チームを追加' })).toBeNull()
-    expect(within(header).queryByRole('combobox')).toBeNull()
+    expect(within(header).getByRole('combobox')).toBeTruthy()
     expect(within(header).getByRole('button', { name: '最新の情報に更新' })).toBeTruthy()
 
-    // 2チーム目に参加すると、チーム名の位置が選択欄になる（チームが変わるとヘッダーは作り直される）
+    // 2チーム目が増えても、同じ選択欄から切り替えられる
     await act(() => h.repo.teams.create('第二チーム', '山田'))
     const currentSelect = () => within(screen.getByRole('banner')).getByRole('combobox', { name: '表示するチーム' }) as HTMLSelectElement
     await waitFor(() => expect(currentSelect().selectedOptions[0].text).toBe('第二チーム'))
@@ -684,5 +684,61 @@ describe('upcoming pagination (#103)', () => {
     await userEvent.click(within(screen.getAllByRole('article')[41]).getAllByRole('button')[0])
     expect(selected).toHaveBeenCalledWith('team', 'e41', expect.any(Function))
     expect(subscribe.mock.calls.map((args) => args[2])).toEqual([20, 40, 60])
+  })
+})
+
+describe('team menu actions (#112)', () => {
+  const menu = () => within(screen.getByRole('banner')).getByRole('combobox', { name: '表示するチーム' }) as HTMLSelectElement
+  it('lists actions after one team, opens the right mode, and returns to the original tab without selecting a team', async () => {
+    const h = harness(), user = userEvent.setup()
+    await h.repo.auth.signIn('admin@example.com', 'Bukatsu#2026')
+    const select = vi.spyOn(h.repo.teams, 'select'), create = vi.spyOn(h.repo.teams, 'create'), join = vi.spyOn(h.repo.teams, 'join')
+    render(<App />, { wrapper: h.wrapper })
+    await screen.findByRole('banner')
+    expect(Array.from(menu().options, (o) => o.text)).toEqual(['サンプルチーム', '別のチームに参加', '新しくチームを作成'])
+    await user.click(screen.getByRole('button', { name: '用具' }))
+    for (const mode of ['join', 'create', 'join'] as const) {
+      await user.selectOptions(menu(), `action:${mode}`)
+      expect((await screen.findByRole('tab', { name: mode === 'join' ? '参加コードで参加' : 'チームを作る' })).getAttribute('aria-selected')).toBe('true')
+      expect(screen.queryByLabelText(mode === 'join' ? /^参加コード/ : /^チーム名/)).not.toBeNull()
+      await user.click(screen.getByRole('button', { name: '戻る' }))
+      expect((await screen.findByRole('button', { name: '用具' })).getAttribute('aria-current')).toBe('page')
+      expect(menu().selectedOptions[0].text).toBe('サンプルチーム')
+    }
+    expect(select).not.toHaveBeenCalled(); expect(create).not.toHaveBeenCalled(); expect(join).not.toHaveBeenCalled()
+  })
+  it('joins another team and creates a team from the corresponding menu actions', async () => {
+    const h = harness(), user = userEvent.setup()
+    await h.repo.auth.signIn('member@example.com', 'Bukatsu#2026')
+    const other = await h.repo.teams.create('参加先チーム', '管理者'), code = await h.repo.teams.getJoinCode(other)
+    await h.repo.auth.signIn('admin@example.com', 'Bukatsu#2026')
+    render(<App />, { wrapper: h.wrapper })
+    await screen.findByRole('banner')
+    await user.selectOptions(menu(), 'action:join')
+    await user.type(await screen.findByLabelText(/このチームでの名前/), '参加者')
+    await user.type(screen.getByLabelText(/^参加コード/), code)
+    await user.click(screen.getByRole('button', { name: '参加する' }))
+    await waitFor(() => expect(menu().selectedOptions[0].text).toBe('参加先チーム'))
+    await user.selectOptions(menu(), 'action:create')
+    await user.type(await screen.findByLabelText(/このチームでの名前/), '作成者')
+    await user.type(screen.getByLabelText(/^チーム名/), '新規チーム')
+    await user.click(screen.getByRole('button', { name: 'チームを作る' }))
+    await waitFor(() => expect(menu().selectedOptions[0].text).toBe('新規チーム'))
+    expect(Array.from(menu().options, (o) => o.text)).toEqual(['サンプルチーム', '参加先チーム', '新規チーム', '別のチームに参加', '新しくチームを作成'])
+    await user.selectOptions(menu(), 'サンプルチーム')
+    await waitFor(() => expect(menu().selectedOptions[0].text).toBe('サンプルチーム'))
+  })
+})
+
+describe('unassigned team entry (#112)', () => {
+  it('keeps the default join screen and create switch available without a team', async () => {
+    const h = harness(), user = userEvent.setup()
+    await h.repo.auth.signIn('newcomer@example.com', 'Bukatsu#2026')
+    render(<App />, { wrapper: h.wrapper })
+    expect((await screen.findByRole('tab', { name: '参加コードで参加' })).getAttribute('aria-selected')).toBe('true')
+    expect(screen.queryByRole('combobox', { name: '表示するチーム' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '戻る' })).toBeNull()
+    await user.click(screen.getByRole('tab', { name: 'チームを作る' }))
+    expect(screen.getByLabelText(/^チーム名/)).toBeTruthy()
   })
 })
