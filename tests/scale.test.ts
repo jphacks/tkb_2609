@@ -2,7 +2,7 @@
 import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing'
-import { deleteApp, initializeApp, type FirebaseApp } from 'firebase/app'
+import { deleteApp, initializeApp, FirebaseError, type FirebaseApp } from 'firebase/app'
 import { connectAuthEmulator, getAuth, signInWithEmailAndPassword } from 'firebase/auth'
 import { collection, collectionGroup, connectFirestoreEmulator, doc, getCountFromServer, getDoc, getDocs, getFirestore, query, where, type Firestore, type Transaction, type TransactionOptions } from 'firebase/firestore'
 import { createFirestoreRepository } from '../src/data/firebase/firestoreRepository'
@@ -10,7 +10,7 @@ import type { Unsubscribe } from '../src/data/repository'
 import type { EquipmentItem, EventNote, Member, TeamEvent } from '../src/types'
 import { noteData, presets, SCALE_PASSWORD, SCALE_PROJECT, scaleEndpoints, seedScale, writeScaleDocuments, type ScaleFixture } from '../scripts/seed-scale'
 
-const probe = vi.hoisted(() => ({ reads: 0, queries: 0, emptyQueries: 0, txReads: 0, sets: 0, updates: 0, deletes: 0, batches: 0, maxBatch: 0, failNotesAfterCommit: false, injectScope: '', holderCommitCountdown: 0, maxQuery: 0, serverSnapshotDocuments: 0, cacheSnapshotDocuments: 0 }))
+const probe = vi.hoisted(() => ({ reads: 0, queries: 0, emptyQueries: 0, txReads: 0, sets: 0, updates: 0, deletes: 0, batches: 0, maxBatch: 0, failNotesAfterCommit: false, injectScope: '', holderCommitCountdown: 0, quotaNotes: false, maxQuery: 0, serverSnapshotDocuments: 0, cacheSnapshotDocuments: 0 }))
 vi.mock('firebase/firestore', async (importOriginal) => {
   const sdk = await importOriginal<typeof import('firebase/firestore')>()
   return {
@@ -29,18 +29,21 @@ vi.mock('firebase/firestore', async (importOriginal) => {
     updateDoc: (async (...args: Parameters<typeof sdk.updateDoc>) => { await sdk.updateDoc(...args); probe.updates++ }) as typeof sdk.updateDoc,
     deleteDoc: (async (...args: Parameters<typeof sdk.deleteDoc>) => { await sdk.deleteDoc(...args); probe.deletes++ }) as typeof sdk.deleteDoc,
     runTransaction: (async (db: Firestore, update: (tx: Transaction) => Promise<unknown>, options?: TransactionOptions) => {
-      let writes = { sets: 0, updates: 0, deletes: 0 }, released = false
+      let writes = { sets: 0, updates: 0, deletes: 0 }, released = false, notes = false
       const result = await sdk.runTransaction(db, async (tx) => {
-        writes = { sets: 0, updates: 0, deletes: 0 }; released = false
+        writes = { sets: 0, updates: 0, deletes: 0 }; released = false; notes = false
         const wrapped = new Proxy(tx, { get(target, property) {
           const value = Reflect.get(target, property)
           if (property === 'get') return (...args: unknown[]) => { probe.txReads++; return Reflect.apply(value, target, args) }
-          if (property === 'set' || property === 'update' || property === 'delete') return (...args: unknown[]) => { writes[property === 'set' ? 'sets' : property === 'update' ? 'updates' : 'deletes']++; const [ref, data] = args as [{ path: string }, Record<string, unknown>]; released ||= property === 'update' && ref.path.startsWith(probe.injectScope) && ref.path.includes('/equipment/') && data.holderUid === null; Reflect.apply(value, target, args); return wrapped }
+          if (property === 'set' || property === 'update' || property === 'delete') return (...args: unknown[]) => { writes[property === 'set' ? 'sets' : property === 'update' ? 'updates' : 'deletes']++; const [ref, data] = args as [{ path: string }, Record<string, unknown>]; notes ||= property === 'delete' && ref.path.startsWith(probe.injectScope) && ref.path.includes('/notes/'); released ||= property === 'update' && ref.path.startsWith(probe.injectScope) && ref.path.includes('/equipment/') && data.holderUid === null; Reflect.apply(value, target, args); return wrapped }
           return typeof value === 'function' ? value.bind(target) : value
         } })
-        return update(wrapped)
+        const result = await update(wrapped)
+        if (notes && probe.quotaNotes) { probe.quotaNotes = false; throw new FirebaseError('resource-exhausted', 'simulated quota') }
+        return result
       }, options)
       probe.sets += writes.sets; probe.updates += writes.updates; probe.deletes += writes.deletes
+      if (notes && probe.failNotesAfterCommit) { probe.failNotesAfterCommit = false; throw new Error('scale check: simulated lost commit response') }
       if (released && probe.holderCommitCountdown > 0 && --probe.holderCommitCountdown === 0) throw new Error('scale check: simulated lost holder response')
       return result
     }) as typeof sdk.runTransaction,
@@ -131,7 +134,7 @@ describe.skipIf(!enabled)('large-data validation (#69)', () => {
       const { repo } = await client(fixture), t = fixture.teamId
       const errors: string[] = [], offErrors = repo.onError!((e) => errors.push(e.message))
       await measure(`${preset}.members`, () => first<Member[]>((cb) => repo.teams.subscribeMembers(t, cb), (rows) => rows.length === fixture.options.members))
-      await measure(`${preset}.events`, () => first<TeamEvent[]>((cb) => repo.events.subscribeUpcoming(t, cb), (rows) => rows.length === fixture.options.events))
+      await measure(`${preset}.events`, () => first<TeamEvent[]>((cb) => repo.events.subscribeUpcoming(t, cb, fixture.options.events), (rows) => rows.length === fixture.options.events))
       await measure(`${preset}.equipment`, () => first<EquipmentItem[]>((cb) => repo.equipment.subscribe(t, cb), (rows) => rows.length === fixture.options.equipment))
       await measure(`${preset}.notes`, () => first<EventNote[]>((cb) => repo.events.subscribeNotes(t, 'event-0', cb), (rows) => rows.length === fixture.options.notesPerEvent))
       await measure(`${preset}.attendance`, () => repo.events.setAttendance(t, 'event-0', 'late'))
@@ -160,7 +163,7 @@ describe.skipIf(!enabled)('large-data validation (#69)', () => {
           expect((await getDoc(doc(db, 'teams', t, 'members', fixture.admin.uid))).exists()).toBe(true)
         })
         const reloaded = await client(fixture)
-        await measure('large.teamDeleteResume', () => reloaded.repo.teams.remove(t))
+        await measure('large.teamDeleteResume', () => reloaded.repo.teams.remove(t, { maxDeletes: 200000 }))
       } else {
         await measure('demo.teamDelete', () => repo.teams.remove(t))
       }
@@ -175,6 +178,18 @@ describe.skipIf(!enabled)('large-data validation (#69)', () => {
       await writeFile(`${output}/${filename}`, JSON.stringify(browserFixture, null, 2))
     }
   }, 900000)
+  it('stops on quota exhaustion without retrying cleanup, then resumes manually (#104)', async () => {
+    const fixture = await seedScale({ members: 2, events: 1, notesPerEvent: 5, equipment: 0 }), { repo } = await client(fixture)
+    probe.injectScope = `teams/${fixture.teamId}/`; probe.quotaNotes = true
+    await expect(repo.teams.remove(fixture.teamId)).rejects.toThrow('利用上限')
+    await adminCheck(async (db) => {
+      expect((await getDocs(collection(db, 'teams', fixture.teamId, 'events', 'event-0', 'notes'))).size).toBe(5)
+      expect((await getDoc(doc(db, 'teams', fixture.teamId))).data()?.deletionUid).toBe(fixture.admin.uid)
+    })
+    const resumed = await client(fixture)
+    await resumed.repo.teams.remove(fixture.teamId)
+    await adminCheck(async (db) => expect((await getDoc(doc(db, 'teams', fixture.teamId))).exists()).toBe(false))
+  }, 60000)
   it('resumes member removal after losing the response for the 50th released item', async () => {
     if (!env) {
       const endpoint = scaleEndpoints(), [host, port] = endpoint.firestoreHost.split(':')

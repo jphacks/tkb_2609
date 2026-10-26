@@ -91,7 +91,7 @@ service cloud.firestore {
         && d.keys().hasOnly(['title', 'typeId', 'startAt', 'place', 'attendance', 'createdBy', 'updatedAt', 'deleting'])
         && text(d.title, 100) && text(d.typeId, 100) && d.startAt is timestamp
         && (d.place == null || (d.place is string && d.place.size() <= 200))
-        && d.attendance is map && d.attendance.size() <= 100 && text(d.createdBy, 128)
+        && d.attendance is map && d.attendance.size() <= 500 && text(d.createdBy, 128)
         && d.updatedAt == request.time;
     }
     function equipmentPath(t, i) { return /databases/$(database)/documents/teams/$(t)/equipment/$(i); }

@@ -194,6 +194,11 @@ Node.js24とJava21以上で `npm run scale:check`。専用の `demo-bukatsu-scal
 
 `npm run scale:seed -- demo` または `large` は専用エミュレータへの投入だけを行う。手順・Safari画面確認・既知の制約は [大量データ検証記録](performance/issue-69.md)を参照する。生成した架空アカウント情報やexportはgit管理しない。実アカウントのメールや本番データをfixtureへ転記しない。
 
+
+## P2の規模対応（#103・#104・#105）
+
+#103〜#105の回帰はnpm testで予定の取得上限・範囲外編集、削除の予算停止と新Repositoryでの再開、500件境界の並行回答とルール拒否を確認する。npm run scale:checkはquota例外の注入による停止・手動再開と101人目の回答成功も確認する。本番のクォータ枯渇やiPhone実機の検証ではない。公開時はアプリとFirestoreルールの両方を反映する必要がある。
+
 ## 詳細表示中のナビゲーション確認（#108）
 
 `VITE_DATA_BACKEND=mock npm run dev -- --host 127.0.0.1 --port 5188` で起動し、`http://127.0.0.1:5188/tests/browser/navigation.html` を開く。ログイン画面のモック用管理者ボタンで入力してログインし、予定を開く。縦390×844・横844×390・PC1200×800で詳細・スクロール・各タブを操作する。検証ページは下端余白34pxを模擬し、重なり面積とスクロール量を表示する。本番ビルドには含まれない。

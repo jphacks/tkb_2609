@@ -26,6 +26,19 @@ async function main() {
   connectFirestoreEmulator(db, host, Number(port))
   await signInWithEmailAndPassword(auth, fixture.admin.email, 'ScaleOnly123!')
   const repository = createFirestoreRepository(auth, db)
+  const firstPages: string[] = []
+  const subscribeUpcoming = repository.events.subscribeUpcoming.bind(repository.events)
+  repository.events.subscribeUpcoming = (teamId, cb, size = 20) => {
+    const started = performance.now()
+    let firstMs: number | undefined
+    const index = firstPages.length
+    firstPages.push('')
+    return subscribeUpcoming(teamId, (events, hasMore) => {
+      firstMs ??= performance.now() - started
+      firstPages[index] = `予定${size}: 初回/最新通知=${Math.round(firstMs)}/${Math.round(performance.now() - started)}ms 件数=${events.length} JSON=${new TextEncoder().encode(JSON.stringify(events)).length}B more=${hasMore}`
+      cb(events, hasMore)
+    }, size)
+  }
   const root = document.getElementById('root')!, metrics = document.getElementById('scale-metrics')!
   const phases: Record<string, { commits: number; maxCommitMs: number; totalReactMs: number; readyMs?: number; domNodes?: number }> = {}
   let phase = '初期表示', actionAt = performance.now(), lastFrame = performance.now(), maxFrameGap = 0
@@ -49,7 +62,7 @@ async function main() {
   }
   setInterval(() => {
     const rows = Object.entries(phases).map(([name, p]) => `${name}: ready=${Math.round(p.readyMs ?? -1)}ms maxCommit=${Math.round(p.maxCommitMs)}ms DOM=${p.domNodes ?? 0}`)
-    metrics.textContent = `大量データ検証（開発ビルド）\n予定${fixture.options.events} / 用具${fixture.options.equipment} / メンバー${fixture.options.members}\nメモ/予定${fixture.options.notesPerEvent}（${fixture.options.noteEvents ?? fixture.options.events}予定のみ）\n最大frame間隔 ${Math.round(maxFrameGap)}ms\n${rows.join('\n')}`
+    metrics.textContent = `大量データ検証（開発ビルド）\n予定${fixture.options.events} / 用具${fixture.options.equipment} / メンバー${fixture.options.members}\n最大frame間隔 ${Math.round(maxFrameGap)}ms\n${rows.join('\n')}\n${firstPages.join('\n')}`
   }, 1000)
 
   createRoot(root).render(<Profiler id="scale-app" onRender={onRender}><RepositoryContext.Provider value={repository}><RefreshProvider><FeedbackProvider><App /></FeedbackProvider></RefreshProvider></RepositoryContext.Provider></Profiler>)
