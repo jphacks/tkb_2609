@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react'
+import { useState, type ComponentType } from 'react'
 import { BoxIcon, CalendarIcon, GearIcon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import { EquipmentTab } from '../features/equipment/EquipmentTab'
@@ -20,6 +20,7 @@ const TABS: { id: TabId; label: string; Icon: ComponentType<{ size?: number }> }
 export function MainShell({ tab, onTabChange: setTab }: { tab: TabId; onTabChange(tab: TabId): void }) {
   const { team } = useSession()
   const navigation = useTeamNavigation()
+  const [scheduleVisit, setScheduleVisit] = useState(0)
 
   return (
     <div className={styles.shell}>
@@ -36,7 +37,7 @@ export function MainShell({ tab, onTabChange: setTab }: { tab: TabId; onTabChang
       </div>
 
       <main className={styles.content}>
-        {tab === 'schedule' && <ScheduleTab />}
+        {tab === 'schedule' && <ScheduleTab key={scheduleVisit} />}
         {tab === 'equipment' && <EquipmentTab />}
         {tab === 'settings' && <SettingsTab />}
       </main>
@@ -48,6 +49,8 @@ export function MainShell({ tab, onTabChange: setTab }: { tab: TabId; onTabChang
             className={styles.tab}
             aria-current={tab === id ? 'page' : undefined}
             onClick={() => {
+              // 詳細表示中に選択中の「予定」を押した場合も一覧へ戻る。
+              if (id === 'schedule') setScheduleVisit((visit) => visit + 1)
               setTab(id)
               window.scrollTo({ top: 0 })
             }}
