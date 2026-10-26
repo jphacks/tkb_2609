@@ -1,3 +1,4 @@
+import { MAX_STORED_ATTENDANCE, ATTENDANCE_LIMIT_MESSAGE } from '../../lib/attendance'
 import { placesError } from '../../lib/places'
 import { eventTypesError } from '../../lib/eventTypes'
 // メモリ上で動くモック実装。localStorage に保存するので、リロードしてもデータとログイン状態が残る。
@@ -328,6 +329,13 @@ export function createMockRepository(): Repository & { reset(): void } {
     },
 
     teams: {
+      async estimateDeletion(teamId) {
+        const { team } = requireAdmin(teamId)
+        const events = Object.keys(team.events).length, equipment = Object.keys(team.equipment).length, members = Object.keys(team.members).length
+        return { events, equipment, members, minimumDocuments: events + equipment + members + 1 }
+      },
+      subscribeDeletionProgress(_t, cb) { cb(null); return () => {} },
+      pauseDeletion() {},
       subscribeJoinCode(teamId, cb) {
         return watch(
           () => (db.teams[teamId]?.members[currentUid ?? '']?.role === 'admin' ? db.teams[teamId].joinCode : null),
@@ -493,7 +501,10 @@ export function createMockRepository(): Repository & { reset(): void } {
     },
 
     events: {
-      subscribeUpcoming(teamId, cb) {
+      subscribeOne(teamId, eventId, cb) {
+        return watch(() => db.teams[teamId]?.events[eventId] ?? null, cb)
+      },
+      subscribeUpcoming(teamId, cb, pageSize = 20) {
         return watch<TeamEvent[]>(() => {
           const today = new Date()
           today.setHours(0, 0, 0, 0)
@@ -501,7 +512,7 @@ export function createMockRepository(): Repository & { reset(): void } {
             .filter((e) => e.startAt >= today)
             .sort((a, b) => a.startAt.getTime() - b.startAt.getTime())
             .map(({ notes: _notes, ...event }) => event)
-        }, cb)
+        }, (events) => cb(events.slice(0, pageSize), events.length > pageSize))
       },
 
       async create(teamId, input, initialNote) {
@@ -555,6 +566,8 @@ export function createMockRepository(): Repository & { reset(): void } {
       async setAttendance(teamId, eventId, status) {
         const { uid, team } = requireMember(teamId)
         const event = requireEvent(team, eventId)
+        if (status !== 'present' && !(uid in event.attendance) && Object.keys(event.attendance).length >= MAX_STORED_ATTENDANCE)
+          throw new RepositoryError(ATTENDANCE_LIMIT_MESSAGE)
         if (status === 'present') delete event.attendance[uid]
         else event.attendance[uid] = status
         commit()

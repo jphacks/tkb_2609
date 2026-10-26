@@ -1,3 +1,5 @@
+import { MAX_STORED_ATTENDANCE, ATTENDANCE_LIMIT_MESSAGE } from '../../lib/attendance'
+import { deletionRun, type DeletionProgress } from '../../lib/deletion'
 import { placesError } from '../../lib/places'
 import { eventTypesError } from '../../lib/eventTypes'
 import {
@@ -25,6 +27,7 @@ import {
   deleteField,
   doc,
   FieldPath,
+  getCountFromServer,
   getDoc,
   getDocs,
   onSnapshot,
@@ -130,6 +133,9 @@ export function createFirestoreRepository(
   auth.languageCode = 'ja'
   let accountDeletionJob: Promise<void> | undefined
   const authListeners = new Set<(user: AuthUser | null) => void>()
+  const deletionStates = new Map<string, DeletionProgress>()
+  const deletionListeners = new Map<string, Set<(p: DeletionProgress | null) => void>>()
+  const deletionControls = new Map<string, ReturnType<typeof deletionRun>>()
   const deletionJobs = new Map<string, Promise<void>>()
   const errors = new Set<(error: RepositoryError) => void>()
   const report = (e: unknown) => errors.forEach((cb) => cb(repositoryError(e)))
@@ -495,9 +501,23 @@ export function createFirestoreRepository(
       }),
     },
     teams: {
-      remove: safe(async (t) => {
+      estimateDeletion: safe(async (t) => {
+        const counts = await Promise.all(['events', 'equipment', 'members'].map(async (path) => (await getCountFromServer(collection(db, 'teams', t, path))).data().count))
+        return { events: counts[0], equipment: counts[1], members: counts[2], minimumDocuments: counts.reduce((a, b) => a + b, 1) }
+      }),
+      subscribeDeletionProgress(t, cb) {
+        const listeners = deletionListeners.get(t) ?? new Set()
+        deletionListeners.set(t, listeners); listeners.add(cb); cb(deletionStates.get(t) ?? null)
+        return () => { listeners.delete(cb); if (!listeners.size) deletionListeners.delete(t) }
+      },
+      pauseDeletion(t) { deletionControls.get(t)?.pause() },
+      remove: safe(async (t, options) => {
         const existing = deletionJobs.get(t)
         if (existing) return existing
+        const control = deletionRun((state) => {
+          deletionStates.set(t, state); deletionListeners.get(t)?.forEach((cb) => cb(state))
+        }, options?.maxDeletes)
+        deletionControls.set(t, control)
         const task = (async () => {
           const actor = uid()
           await repository.teams.select(t)
@@ -511,29 +531,35 @@ export function createFirestoreRepository(
           // 親の予定を最後まで残し、途中失敗しても notes の走査先を失わない。
           const clear = async (segments: string[]) => {
             while (true) {
-              const page = await getDocs(query(collection(db, segments.join('/')), limit(100)))
+              control.check()
+              const page = await getDocs(query(collection(db, segments.join('/')), limit(Math.min(100, control.remaining()))))
               if (page.empty) break
-              const batch = writeBatch(db)
-              page.docs.forEach((entry) => batch.delete(entry.ref))
-              await batch.commit()
+              // オフライン書込キューへ積まず、quotaエラーでアプリ側の処理を停止する。
+              await runTransaction(db, async (tx) => { page.docs.forEach((entry) => tx.delete(entry.ref)) }, { maxAttempts: 1 })
+              control.completed(page.size, segments.at(-1) === 'notes' ? 'メモ' : '用具名')
             }
           }
           while (true) {
+            control.check()
             const events = await getDocs(query(collection(db, 'teams', t, 'events'), limit(50)))
             if (events.empty) break
             for (const event of events.docs) {
               await clear(['teams', t, 'events', event.id, 'notes'])
-              await deleteDoc(event.ref)
+              control.check()
+              await runTransaction(db, async (tx) => { tx.delete(event.ref) }, { maxAttempts: 1 })
+              control.completed(1, '予定')
             }
           }
           // 削除中もメンバーは通常どおり使うため、途中で止まっても所持数（heldCount）が実際の用具と食い違わないよう、
           // 通常の削除と同じく所持数を更新しながら1点ずつ消す
           while (true) {
+            control.check(2)
             const items = await getDocs(query(collection(db, 'teams', t, 'equipment'), limit(100)))
             if (items.empty) break
             for (const item of items.docs) {
               // 同時にメンバーが消した用具は飛ばす。それ以外の失敗は削除を止め、再開に任せる（無限に繰り返さない）
-              await repository.equipment.remove(t, item.id).catch((error: unknown) => {
+              control.check(2)
+              await repository.equipment.remove(t, item.id).then(() => control.completed(2, '用具')).catch((error: unknown) => {
                 if (!(error instanceof RepositoryError && error.message.includes('見つかりません'))) throw error
               })
             }
@@ -541,31 +567,34 @@ export function createFirestoreRepository(
           await clear(['teams', t, 'equipmentNames'])
           const code = await getDoc(privateRef(t))
           if (code.exists()) {
-            const batch = writeBatch(db)
-            batch.delete(codeRef(code.data().code))
-            batch.delete(code.ref)
-            await batch.commit()
+            control.check(2)
+            await runTransaction(db, async (tx) => { tx.delete(codeRef(code.data().code)); tx.delete(code.ref) }, { maxAttempts: 1 })
+            control.completed(2, '参加コード')
           }
-          const detachDeleted = async (target: string, final = false) => runTransaction(db, async (tx) => {
-            const profile = await tx.get(userRef(target))
-            if (profile.exists()) {
-              const remaining = teamIdsFrom(profile.data()).filter((id) => id !== t)
-              tx.update(profile.ref, {
-                teamIds: remaining,
-                teamId: profile.data().teamId === t ? remaining[0] ?? null : profile.data().teamId,
-                membershipChangeTeamId: t,
-              })
-            }
-            tx.delete(memberRef(t, target))
-            if (final) tx.delete(teamRef(t))
-          })
+          const detachDeleted = async (target: string, final = false) => {
+            control.check(final ? 2 : 1)
+            await runTransaction(db, async (tx) => {
+              const profile = await tx.get(userRef(target))
+              if (profile.exists()) {
+                const remaining = teamIdsFrom(profile.data()).filter((id) => id !== t)
+                tx.update(profile.ref, {
+                  teamIds: remaining,
+                  teamId: profile.data().teamId === t ? remaining[0] ?? null : profile.data().teamId,
+                  membershipChangeTeamId: t,
+                })
+              }
+              tx.delete(memberRef(t, target))
+              if (final) tx.delete(teamRef(t))
+            }, { maxAttempts: 1 })
+            control.completed(final ? 2 : 1, 'メンバー')
+          }
           const members = await getDocs(collection(db, 'teams', t, 'members'))
           for (const member of members.docs) if (member.id !== actor) await detachDeleted(member.id)
           // 削除者の所属と親は最後に同時削除し、リロード後も再開できるようにする。
           await detachDeleted(actor, true)
         })()
         deletionJobs.set(t, task)
-        try { await task } finally { deletionJobs.delete(t) }
+        try { await task; control.finish('削除が完了しました。') } catch (error) { control.finish(repositoryError(error).message); throw error } finally { deletionJobs.delete(t); deletionControls.delete(t) }
       }),
       subscribeMine(cb) {
         const u = uid()
@@ -733,7 +762,10 @@ export function createFirestoreRepository(
       }),
     },
     events: {
-      subscribeUpcoming(t, cb) {
+      subscribeOne(t, e, cb) {
+        return watchDoc(eventRef(t, e), (s) => s.exists() && !s.data().deleting ? eventFrom(s) : null, cb, null)
+      },
+      subscribeUpcoming(t, cb, pageSize = 20) {
         let off: Unsubscribe = () => {},
           timer: ReturnType<typeof setTimeout>
         const start = () => {
@@ -745,9 +777,10 @@ export function createFirestoreRepository(
               collection(db, 'teams', t, 'events'),
               where('startAt', '>=', Timestamp.fromDate(today)),
               orderBy('startAt'),
+              limit(Math.max(1, Math.floor(pageSize)) + 1),
             ),
             eventFrom,
-            (events) => cb(events.filter((event) => !event.deleting)),
+            (events) => cb(events.slice(0, pageSize).filter((event) => !event.deleting), events.length > pageSize),
             t,
           )
           const tomorrow = new Date(today)
@@ -814,13 +847,15 @@ export function createFirestoreRepository(
       setAttendance: safe(async (t, e, status) => {
         if (!['present', 'absent', 'observe', 'late', 'leave_early'].includes(status))
           throw new RepositoryError('出欠を確認してください。')
-        await updateDoc(
-          eventRef(t, e),
-          new FieldPath('attendance', uid()),
-          status === 'present' ? deleteField() : status,
-          'updatedAt',
-          serverTimestamp(),
-        )
+        const actor = uid()
+        await runTransaction(db, async (tx) => {
+          const event = await tx.get(eventRef(t, e))
+          if (!event.exists()) throw new RepositoryError('予定が見つかりません。')
+          const attendance = event.data().attendance as Record<string, string>
+          if (status !== 'present' && !(actor in attendance) && Object.keys(attendance).length >= MAX_STORED_ATTENDANCE)
+            throw new RepositoryError(ATTENDANCE_LIMIT_MESSAGE)
+          tx.update(event.ref, new FieldPath('attendance', actor), status === 'present' ? deleteField() : status, 'updatedAt', serverTimestamp())
+        })
       }),
       subscribeNotes(t, e, cb) {
         return watchList(query(collection(db, 'teams', t, 'events', e, 'notes'), orderBy('createdAt')), noteFrom, cb, t)

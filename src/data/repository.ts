@@ -1,3 +1,4 @@
+import type { DeletionEstimate, DeletionProgress } from '../lib/deletion'
 // データの読み書きはすべてこのインターフェースを通す。
 // モック段階ではメモリ上の実装（mock/）を使い、実装段階で Firestore 版に差し替える。
 // subscribe 系は Firestore の onSnapshot と同じく、変更のたびにコールバックを呼ぶ。
@@ -49,7 +50,10 @@ export interface Repository {
   }
   teams: {
     /** 管理者のみ。チーム全体と参加コードを削除し、全員の所属から外す */
-    remove(teamId: string): Promise<void>
+    remove(teamId: string, options?: { maxDeletes?: number }): Promise<void>
+    estimateDeletion(teamId: string): Promise<DeletionEstimate>
+    subscribeDeletionProgress(teamId: string, cb: (progress: DeletionProgress | null) => void): Unsubscribe
+    pauseDeletion(teamId: string): void
     subscribeMine(cb: (teams: Team[]) => void): Unsubscribe
     select(teamId: string): Promise<void>
     /** チームを作り、作成者を管理者として登録する。戻り値は teamId */
@@ -76,8 +80,9 @@ export interface Repository {
     regenerateJoinCode(teamId: string): Promise<string>
   }
   events: {
-    /** 今日以降の予定を近い順に */
-    subscribeUpcoming(teamId: string, cb: (events: TeamEvent[]) => void): Unsubscribe
+    /** 今日以降の予定を近い順に初期20件。追加の有無を通知し、pageSizeで範囲を拡大する */
+    subscribeUpcoming(teamId: string, cb: (events: TeamEvent[], hasMore: boolean) => void, pageSize?: number): Unsubscribe
+    subscribeOne(teamId: string, eventId: string, cb: (event: TeamEvent | null) => void): Unsubscribe
     create(teamId: string, input: EventInput, initialNote?: string): Promise<string>
     /** 毎週の予定などをまとめて追加する（1〜52件）。すべて成功するか、すべて失敗する */
     createMany(teamId: string, inputs: EventInput[]): Promise<string[]>
