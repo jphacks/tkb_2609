@@ -46,7 +46,7 @@ export interface TeamNavigation {
   teams: Team[]
   select(teamId: string): void
   /** チームの参加・作成の画面を開く */
-  add(): void
+  add(mode?: 'join' | 'create'): void
 }
 
 export const TeamNavigationContext = createContext<TeamNavigation | null>(null)
@@ -65,6 +65,11 @@ export function useSession(): Session {
  */
 export function canSwitchTeam(navigation: TeamNavigation | null, teamId: string): navigation is TeamNavigation {
   return !!navigation && navigation.teams.length > 1 && navigation.teams.some((t) => t.id === teamId)
+}
+
+/** 所属が1件でも参加・作成の操作を開ける。読み込み中の不整合な一覧は出さない。 */
+export function canOpenTeamMenu(navigation: TeamNavigation | null, teamId: string): navigation is TeamNavigation {
+  return !!navigation && navigation.teams.some((t) => t.id === teamId)
 }
 
 export const AccountNavigationContext = createContext<(() => void) | null>(null)

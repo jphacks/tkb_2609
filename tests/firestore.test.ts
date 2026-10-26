@@ -419,6 +419,20 @@ describe('Firestore repository against Auth + Firestore emulators', () => {
     await assertFails(updateDoc(doc(outsider, 'teams', t, 'events', e), { 'attendance.member': 'absent', updatedAt: serverTimestamp() }))
     await assertFails(updateDoc(doc(outsider, 'teams', t, 'events', e), { [`attendance.${actor}`]: 'late', updatedAt: serverTimestamp() }))
   })
+  it('keeps the 20-team limit for both entry actions without changing membership (#112)', async () => {
+    const a = await client(), t = await a.teams.create('元チーム', '本人'), b = await client()
+    const target = await b.teams.create('参加先', '管理者'), code = await b.teams.getJoinCode(target)
+    const actor = (await waitFor<AuthUser | null>((cb) => a.auth.onAuthStateChanged(cb), (u) => !!u))!.uid
+    const ids = [t, ...Array.from({ length: 19 }, (_, i) => `limit-team-${i}`)]
+    await env.withSecurityRulesDisabled(async (ctx) => updateDoc(doc(ctx.firestore() as unknown as Firestore, 'users', actor), { teamIds: ids }))
+    await expect(a.teams.create('作成不可', '本人')).rejects.toThrow('20件まで')
+    await expect(a.teams.join(code, '本人')).rejects.toThrow('20件まで')
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore() as unknown as Firestore
+      expect((await getDoc(doc(db, 'users', actor))).data()).toMatchObject({ teamId: t, teamIds: ids })
+      expect((await getDoc(doc(db, 'teams', target, 'members', actor))).exists()).toBe(false)
+    })
+  })
   it('queries today onward in order; writes attendance per UID and initial notes atomically', async () => {
     const a = await client(),
       t = await a.teams.create('予定チーム', 'テスト'),

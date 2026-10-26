@@ -109,12 +109,12 @@ export function SettingsTab() {
 
       {isAdmin && repo.supports?.deleteTeam && <DeleteTeamSection />}
 
-      {/* めったに使わないため、画面上部ではなく設定タブに置く（#59） */}
+      {/* ヘッダーに加え、設定からの参加・作成の入口も維持する（#112）。 */}
       {navigation && (
         <section className={styles.section}>
           <h2 className="section-title">ほかのチーム</h2>
           <div className={styles.accountActions}>
-            <button className="btn btn-secondary btn-block" onClick={navigation.add}>
+            <button className="btn btn-secondary btn-block" onClick={() => navigation.add()}>
               チームを追加
             </button>
             <p className="hint">
