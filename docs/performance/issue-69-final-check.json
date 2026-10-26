@@ -1,0 +1,330 @@
+{
+  "environment": {
+    "node": "v24.19.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "measuredAt": "2026-10-26T00:07:46.173Z",
+  "measurements": [
+    {
+      "phase": "demo.members",
+      "ms": 66.91833299999996,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 50,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 50,
+        "jsonBytes": 7694
+      }
+    },
+    {
+      "phase": "demo.events",
+      "ms": 21.59400000000005,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 20,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 20,
+        "jsonBytes": 67651
+      }
+    },
+    {
+      "phase": "demo.equipment",
+      "ms": 15.323582999999985,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 30,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 30,
+        "jsonBytes": 4401
+      }
+    },
+    {
+      "phase": "demo.notes",
+      "ms": 11.36912499999994,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 20,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 20,
+        "jsonBytes": 5065
+      }
+    },
+    {
+      "phase": "demo.attendance",
+      "ms": 14.450249999999983,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 1,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "demo.teamDelete",
+      "ms": 1324.038875,
+      "counts": {
+        "reads": 524,
+        "queries": 46,
+        "emptyQueries": 23,
+        "txReads": 101,
+        "sets": 0,
+        "updates": 72,
+        "deletes": 533,
+        "batches": 21,
+        "maxBatch": 20,
+        "maxQuery": 50,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "large.members",
+      "ms": 46.50116700000035,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 100,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 100,
+        "jsonBytes": 15444
+      }
+    },
+    {
+      "phase": "large.events",
+      "ms": 159.43004199999996,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 500,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 500,
+        "jsonBytes": 3291891
+      }
+    },
+    {
+      "phase": "large.equipment",
+      "ms": 51.07183299999997,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 300,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 300,
+        "jsonBytes": 44291
+      }
+    },
+    {
+      "phase": "large.notes",
+      "ms": 116.52258299999994,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 200,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 200,
+        "jsonBytes": 51469
+      }
+    },
+    {
+      "phase": "large.attendance",
+      "ms": 7.995124999999462,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 1,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "large.removeMemberWith100Items",
+      "ms": 824.5451659999999,
+      "counts": {
+        "reads": 202,
+        "queries": 2,
+        "emptyQueries": 0,
+        "txReads": 303,
+        "sets": 0,
+        "updates": 202,
+        "deletes": 1,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 100,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "large.eventDeleteResume551Notes",
+      "ms": 1204.1080000000002,
+      "counts": {
+        "reads": 555,
+        "queries": 3,
+        "emptyQueries": 1,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 1,
+        "deletes": 552,
+        "batches": 2,
+        "maxBatch": 450,
+        "maxQuery": 450,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "large.teamDeleteResume",
+      "ms": 183200.387666,
+      "counts": {
+        "reads": 101101,
+        "queries": 1513,
+        "emptyQueries": 502,
+        "txReads": 500,
+        "sets": 0,
+        "updates": 200,
+        "deletes": 100901,
+        "batches": 998,
+        "maxBatch": 100,
+        "maxQuery": 100,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "memberRemoval.interruptedAfter50Items",
+      "ms": 464.33600000001024,
+      "counts": {
+        "reads": 202,
+        "queries": 2,
+        "emptyQueries": 0,
+        "txReads": 150,
+        "sets": 0,
+        "updates": 101,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 100,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "memberRemoval.resumedRemaining50Items",
+      "ms": 373.7335000000021,
+      "counts": {
+        "reads": 152,
+        "queries": 2,
+        "emptyQueries": 0,
+        "txReads": 153,
+        "sets": 0,
+        "updates": 102,
+        "deletes": 1,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 100,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    }
+  ]
+}

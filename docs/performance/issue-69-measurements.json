@@ -1,0 +1,294 @@
+{
+  "environment": {
+    "node": "v24.19.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "measuredAt": "2026-10-25T16:26:49.840Z",
+  "measurements": [
+    {
+      "phase": "demo.members",
+      "ms": 162.78387499999985,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 50,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 50,
+        "jsonBytes": 7694
+      }
+    },
+    {
+      "phase": "demo.events",
+      "ms": 28.116500000000087,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 20,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 20,
+        "jsonBytes": 67651
+      }
+    },
+    {
+      "phase": "demo.equipment",
+      "ms": 13.608416000000034,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 30,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 30,
+        "jsonBytes": 4401
+      }
+    },
+    {
+      "phase": "demo.notes",
+      "ms": 14.890374999999949,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 20,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 20,
+        "jsonBytes": 5065
+      }
+    },
+    {
+      "phase": "demo.attendance",
+      "ms": 34.218791999999894,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 1,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "demo.teamDelete",
+      "ms": 1350.6568340000001,
+      "counts": {
+        "reads": 524,
+        "queries": 46,
+        "emptyQueries": 23,
+        "txReads": 101,
+        "sets": 0,
+        "updates": 72,
+        "deletes": 533,
+        "batches": 21,
+        "maxBatch": 20,
+        "maxQuery": 50,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "large.members",
+      "ms": 42.47333400000025,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 100,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 100,
+        "jsonBytes": 15444
+      }
+    },
+    {
+      "phase": "large.events",
+      "ms": 155.5838329999997,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 500,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 500,
+        "jsonBytes": 3291891
+      }
+    },
+    {
+      "phase": "large.equipment",
+      "ms": 57.18000000000029,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 300,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 300,
+        "jsonBytes": 44291
+      }
+    },
+    {
+      "phase": "large.notes",
+      "ms": 175.16504199999963,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 0,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 200,
+        "cacheSnapshotDocuments": 0
+      },
+      "result": {
+        "documents": 200,
+        "jsonBytes": 51469
+      }
+    },
+    {
+      "phase": "large.attendance",
+      "ms": 14.785791000000245,
+      "counts": {
+        "reads": 0,
+        "queries": 0,
+        "emptyQueries": 0,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 1,
+        "deletes": 0,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 0,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "large.removeMemberWith100Items",
+      "ms": 776.6181659999993,
+      "counts": {
+        "reads": 202,
+        "queries": 2,
+        "emptyQueries": 0,
+        "txReads": 303,
+        "sets": 0,
+        "updates": 202,
+        "deletes": 1,
+        "batches": 0,
+        "maxBatch": 0,
+        "maxQuery": 100,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "large.eventDeleteResume551Notes",
+      "ms": 938.4342500000002,
+      "counts": {
+        "reads": 555,
+        "queries": 3,
+        "emptyQueries": 1,
+        "txReads": 0,
+        "sets": 0,
+        "updates": 1,
+        "deletes": 552,
+        "batches": 2,
+        "maxBatch": 450,
+        "maxQuery": 450,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    },
+    {
+      "phase": "large.teamDeleteResume",
+      "ms": 177886.426,
+      "counts": {
+        "reads": 101101,
+        "queries": 1513,
+        "emptyQueries": 502,
+        "txReads": 500,
+        "sets": 0,
+        "updates": 200,
+        "deletes": 100901,
+        "batches": 998,
+        "maxBatch": 100,
+        "maxQuery": 100,
+        "serverSnapshotDocuments": 0,
+        "cacheSnapshotDocuments": 0
+      }
+    }
+  ]
+}
