@@ -58,16 +58,16 @@ function SignedIn({ user }: { user: AuthUser }) {
   const profile = useSubscription<UserProfile | null>((cb) => repo.users.subscribeProfile(user.uid, cb), [user.uid])
 
   const teams = useSubscription<Team[]>((cb) => repo.teams.subscribeMine(cb), [user.uid])
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState<'join' | 'create' | null>(null)
   const [accountOpen, setAccountOpen] = useState(false)
   // 表示中のタブ。チームを切り替えても、設定タブの「チームを追加」から戻っても、同じタブを開く（#59）
   const [tab, setTab] = useState<TabId>('schedule')
   const { run } = useFeedback()
-  // チームの切り替えは画面上部のヘッダー、追加は設定タブから行う（#59）
+  // ヘッダーは参加・作成を直接選べる。設定からの追加は従来どおり参加から（#112）。
   const navigation = useMemo<TeamNavigation | null>(
     () =>
       repo.supports?.multipleTeams && teams
-        ? { teams, select: (teamId) => void run(() => repo.teams.select(teamId)), add: () => setAdding(true) }
+        ? { teams, select: (teamId) => void run(() => repo.teams.select(teamId)), add: (mode = 'join') => setAdding(mode) }
         : null,
     [repo, teams, run],
   )
@@ -80,7 +80,7 @@ function SignedIn({ user }: { user: AuthUser }) {
   if (!profile.teamId || adding) {
     return (
       <AccountNavigationContext.Provider value={() => setAccountOpen(true)}>
-        <TeamEntryScreen profile={profile} onDone={profile.teamId ? () => setAdding(false) : undefined} />
+        <TeamEntryScreen key={adding ?? 'unassigned'} profile={profile} initialMode={adding ?? 'join'} onDone={profile.teamId ? () => setAdding(null) : undefined} />
       </AccountNavigationContext.Provider>
     )
   }
@@ -202,7 +202,7 @@ function OtherTeams({ teamId }: { teamId: string }) {
           <TeamSelect teamId={teamId} teamName="" variant="field" />
         </label>
       )}
-      <button className="btn btn-secondary" onClick={navigation.add}>
+      <button className="btn btn-secondary" onClick={() => navigation.add()}>
         チームを追加
       </button>
     </div>

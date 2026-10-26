@@ -7,11 +7,11 @@ import type { UserProfile } from '../../types'
 import styles from './auth.module.css'
 
 /** チームに未所属のユーザー向け。参加コードで参加するか、チームを作る */
-export function TeamEntryScreen({ profile, onDone }: { profile: UserProfile; onDone?: () => void }) {
+export function TeamEntryScreen({ profile, onDone, initialMode = 'join' }: { profile: UserProfile; onDone?: () => void; initialMode?: 'join' | 'create' }) {
   const repo = useRepository()
   const openAccount = useAccountNavigation()
   const { run } = useFeedback()
-  const [mode, setMode] = useState<'join' | 'create'>('join')
+  const [mode, setMode] = useState<'join' | 'create'>(initialMode)
   const [displayName, setDisplayName] = useState('')
   const [code, setCode] = useState('')
   const [teamName, setTeamName] = useState('')
