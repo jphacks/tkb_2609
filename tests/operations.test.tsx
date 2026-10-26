@@ -11,6 +11,7 @@ import { createMockRepository } from '../src/data/mock/mockRepository'
 import { LoginScreen } from '../src/features/auth/LoginScreen'
 import { SignUpScreen } from '../src/features/auth/SignUpScreen'
 import { EquipmentTab } from '../src/features/equipment/EquipmentTab'
+import { ScheduleTab } from '../src/features/schedule/ScheduleTab'
 import { EventForm } from '../src/features/schedule/EventForm'
 import { MyItemsWidget } from '../src/features/equipment/MyItemsWidget'
 import { SettingsTab } from '../src/features/settings/SettingsTab'
@@ -630,5 +631,25 @@ describe('team switching in the header (#59)', () => {
     expect(screen.getByRole('button', { name: 'チームを追加' })).toBeTruthy()
     await user.selectOptions(screen.getByRole('combobox', { name: '表示するチーム' }), 'サンプルチーム')
     expect(await within(await screen.findByRole('banner')).findByRole('combobox', { name: '表示するチーム' })).toBeTruthy()
+  })
+})
+
+describe('upcoming pagination (#103)', () => {
+  it('shows 20 cards initially, expands on demand, and subscribes to a selected event independently', async () => {
+    const h = harness()
+    const rows = Array.from({ length: 42 }, (_, i) => ({ id: `e${i}`, title: `予定${i}`, typeId: 'practice', startAt: new Date(Date.now() + 86400000 + i * 60000), place: null, attendance: {}, createdBy: 'admin', updatedAt: new Date() }))
+    const subscribe = vi.spyOn(h.repo.events, 'subscribeUpcoming').mockImplementation((_t, cb, size = 20) => { cb(rows.slice(0, size), rows.length > size); return () => {} })
+    const selected = vi.spyOn(h.repo.events, 'subscribeOne').mockImplementation((_t, id, cb) => { cb(rows.find((e) => e.id === id) ?? null); return () => {} })
+    vi.spyOn(h.repo.events, 'subscribeNotes').mockImplementation((_t, _e, cb) => { cb([]); return () => {} })
+    render(<ScheduleTab />, { wrapper: h.wrapper })
+    expect(await screen.findAllByRole('article')).toHaveLength(20)
+    await userEvent.click(screen.getByRole('button', { name: '次の20件を表示' }))
+    expect(await screen.findAllByRole('article')).toHaveLength(40)
+    await userEvent.click(screen.getByRole('button', { name: '次の20件を表示' }))
+    expect(await screen.findAllByRole('article')).toHaveLength(42)
+    expect(screen.queryByRole('button', { name: '次の20件を表示' })).toBeNull()
+    await userEvent.click(within(screen.getAllByRole('article')[41]).getAllByRole('button')[0])
+    expect(selected).toHaveBeenCalledWith('team', 'e41', expect.any(Function))
+    expect(subscribe.mock.calls.map((args) => args[2])).toEqual([20, 40, 60])
   })
 })

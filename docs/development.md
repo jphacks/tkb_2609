@@ -193,3 +193,8 @@ Node.jsのエミュレータ統合テストはブラウザのIndexedDB／localSt
 Node.js24とJava21以上で `npm run scale:check`。専用の `demo-bukatsu-scale` と別ポート（Firestore18080/Auth19099）を使用し、既存の開発エミュレータや本番に接続しない。検証後に `.scale-artifacts/` へ計測結果・ブラウザ用fixture・エミュレータexportを保存する。約10万件のメモを扱い、単発の実行で数分かかるため、通常の `npm test` とCIでは負荷テストをスキップする。
 
 `npm run scale:seed -- demo` または `large` は専用エミュレータへの投入だけを行う。手順・Safari画面確認・既知の制約は [大量データ検証記録](performance/issue-69.md)を参照する。生成した架空アカウント情報やexportはgit管理しない。実アカウントのメールや本番データをfixtureへ転記しない。
+
+
+## P2の規模対応（#103・#104・#105）
+
+#103〜#105の回帰はnpm testで予定の取得上限・範囲外編集、削除の予算停止と新Repositoryでの再開、500件境界の並行回答とルール拒否を確認する。npm run scale:checkはquota例外の注入による停止・手動再開と101人目の回答成功も確認する。本番のクォータ枯渇やiPhone実機の検証ではない。公開時はアプリとFirestoreルールの両方を反映する必要がある。

@@ -5,6 +5,7 @@ export function repositoryError(error: unknown): RepositoryError {
   if (error instanceof FirebaseError) {
     const messages: Record<string, string> = {
       'permission-denied': 'この操作は許可されていません。権限とチームへの所属を確認してください。',
+      'resource-exhausted': '利用上限に達したため停止しました。Firestoreの使用量を管理者が確認し、日次上限の場合は太平洋時間の午前0時ごろのリセット後に再開してください。自動では再試行しません。',
       unavailable: '接続できません。通信状態を確認して、もう一度お試しください。',
       'not-found': 'データが見つかりません。再取得してください。',
       'auth/requires-recent-login': '本人確認の有効期限が切れました。再認証して削除を再開してください。',
