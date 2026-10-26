@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import { ClockIcon, PinIcon } from '../../components/icons'
 import { formatDate, formatTime, relativeDay } from '../../lib/format'
 import type { EventType, TeamEvent } from '../../types'
-import { AttendanceButtons } from './AttendanceButtons'
+import { AttendanceButtons, AttendanceCapacityHint } from './AttendanceButtons'
 import styles from './schedule.module.css'
 import { useMyAttendance } from './useMyAttendance'
 
@@ -33,6 +33,7 @@ export function EventCard({ event, type, onOpen }: { event: TeamEvent; type?: Ev
         </div>
       </button>
       <AttendanceButtons value={myStatus} onChange={changeStatus} />
+      <AttendanceCapacityHint count={Object.keys(event.attendance).length} />
     </article>
   )
 }

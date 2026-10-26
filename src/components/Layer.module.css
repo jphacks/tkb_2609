@@ -1,6 +1,9 @@
 .backdrop {
   position: fixed;
   inset: 0;
+  bottom: var(--team-layer-bottom, 0px);
+  left: var(--team-layer-left, 0px);
+  right: var(--team-layer-right, 0px);
   z-index: 40;
 }
 

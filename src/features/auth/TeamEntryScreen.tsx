@@ -85,6 +85,7 @@ export function TeamEntryScreen({ profile, onDone }: { profile: UserProfile; onD
           </label>
         )}
 
+        <p className="hint">出欠は1予定につき「出席以外」の回答が500件までです。出席の回答はこの上限に含まれません。</p>
         {error && <p className="error-text">{error}</p>}
         <button className="btn btn-primary btn-block" disabled={busy}>
           {mode === 'join' ? '参加する' : 'チームを作る'}

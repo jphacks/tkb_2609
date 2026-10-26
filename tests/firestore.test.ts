@@ -362,6 +362,63 @@ describe('Firestore repository against Auth + Firestore emulators', () => {
       other = await second.teams.create('別チーム', 'テスト')
     expect(await waitFor<TeamEvent[]>((cb) => second.events.subscribeUpcoming(other, cb))).toEqual([])
   })
+  it('bounds upcoming reads and keeps out-of-window events available by ID (#103)', async () => {
+    const a = await client(), t = await a.teams.create('ページ確認', '管理者')
+    const ids = await a.events.createMany(t, Array.from({ length: 42 }, (_, i) => ({
+      title: `予定${i}`, typeId: 'practice', startAt: new Date(Date.now() + 86400000 + i * 60000), place: null,
+    })))
+    const first = await waitFor<{ rows: TeamEvent[]; more: boolean }>((cb) => a.events.subscribeUpcoming(t, (rows, more) => cb({ rows, more })))
+    expect(first.rows.map((e) => e.id)).toEqual(ids.slice(0, 20)); expect(first.more).toBe(true)
+    const expanded = await waitFor<{ rows: TeamEvent[]; more: boolean }>((cb) => a.events.subscribeUpcoming(t, (rows, more) => cb({ rows, more }), 60))
+    expect(expanded.rows.map((e) => e.id)).toEqual(ids); expect(expanded.more).toBe(false)
+    const moved = new Date(Date.now() + 100 * 86400000)
+    await a.events.update(t, ids[0], { title: '移動済み', typeId: 'practice', startAt: moved, place: null })
+    const selected = await waitFor<TeamEvent | null>((cb) => a.events.subscribeOne(t, ids[0], cb), (e) => e?.title === '移動済み')
+    expect(selected?.startAt.getTime()).toBe(moved.getTime())
+    expect((await waitFor<TeamEvent[]>((cb) => a.events.subscribeUpcoming(t, cb))).some((e) => e.id === ids[0])).toBe(false)
+    const past = new Date(Date.now() - 86400000)
+    await a.events.update(t, ids[0], { title: '過去へ移動', typeId: 'practice', startAt: past, place: null })
+    expect((await waitFor<TeamEvent | null>((cb) => a.events.subscribeOne(t, ids[0], cb), (e) => e?.startAt.getTime() === past.getTime()))?.id).toBe(ids[0])
+  })
+  it('stops deletion at a bounded budget and resumes with a fresh repository (#104)', async () => {
+    const a = await client(), t = await a.teams.create('停止確認', '管理者')
+    const other = await a.teams.create('保持確認', '管理者')
+    const e = await a.events.create(t, { title: '予定', typeId: 'practice', startAt: new Date(Date.now() + 86400000), place: null })
+    for (let i = 0; i < 5; i++) await a.events.addNote(t, e, `メモ${i}`)
+    expect((await a.teams.estimateDeletion(t)).minimumDocuments).toBe(3)
+    const updates: { deleted: number; running: boolean }[] = []
+    const off = a.teams.subscribeDeletionProgress(t, (p) => { if (p) updates.push(p) })
+    await expect(a.teams.remove(t, { maxDeletes: 2 })).rejects.toThrow('今回の削除上限')
+    expect(updates.at(-1)).toMatchObject({ deleted: 2, running: false })
+    expect((await waitFor<EventNote[]>((cb) => a.events.subscribeNotes(t, e, cb), (rows) => rows.length === 3)).length).toBe(3)
+    const app = apps.at(-1)!, resumed = createFirestoreRepository(getAuth(app), getFirestore(app))
+    await resumed.teams.select(other)
+    expect((await waitFor<Team | null>((cb) => resumed.teams.subscribe(other, cb)))?.name).toBe('保持確認')
+    await resumed.teams.remove(t)
+    expect((await waitFor<Team[]>((cb) => resumed.teams.subscribeMine(cb))).map((team) => team.id)).toEqual([other])
+    off()
+  })
+  it('enforces the 500 answer cap atomically while allowing existing answers and present (#105)', async () => {
+    const a = await client(), t = await a.teams.create('回答境界', '管理者'), b = await client(), c = await client()
+    const code = await a.teams.getJoinCode(t)
+    await b.teams.join(code, 'B'); await c.teams.join(code, 'C')
+    const actor = (await waitFor<AuthUser | null>((cb) => a.auth.onAuthStateChanged(cb), (u) => !!u))!.uid
+    const e = await a.events.create(t, { title: '予定', typeId: 'practice', startAt: new Date(Date.now() + 86400000), place: null })
+    const attendance = { ...Object.fromEntries(Array.from({ length: 499 }, (_, i) => [(String(i) + 'x'.repeat(128)).slice(0, 128), 'absent'])), [actor]: 'absent' }
+    expect(Buffer.byteLength(JSON.stringify(attendance))).toBeLessThan(300000)
+    await env.withSecurityRulesDisabled(async (ctx) => updateDoc(doc(ctx.firestore() as unknown as Firestore, 'teams', t, 'events', e), { attendance }))
+    await expect(a.events.setAttendance(t, e, 'late')).resolves.toBeUndefined()
+    await expect(b.events.setAttendance(t, e, 'absent')).rejects.toThrow('500件まで')
+    await a.events.setAttendance(t, e, 'present')
+    const results = await Promise.allSettled([b.events.setAttendance(t, e, 'absent'), c.events.setAttendance(t, e, 'late')])
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1)
+    // アプリを通さない書き込みでも501件目と他人の回答変更を拒否する。
+    const outsider = dbFor('member')
+    await env.withSecurityRulesDisabled(async (ctx) => setDoc(doc(ctx.firestore() as unknown as Firestore, 'teams', t, 'members', 'member'), memberData()))
+    await assertFails(updateDoc(doc(outsider, 'teams', t, 'events', e), { 'attendance.member': 'absent', updatedAt: serverTimestamp() }))
+    await assertFails(updateDoc(doc(outsider, 'teams', t, 'events', e), { [`attendance.${actor}`]: 'late', updatedAt: serverTimestamp() }))
+  })
   it('queries today onward in order; writes attendance per UID and initial notes atomically', async () => {
     const a = await client(),
       t = await a.teams.create('予定チーム', 'テスト'),
@@ -536,7 +593,7 @@ describe('additional consistency guarantees', () => {
     const ids = await a.events.createMany(t, inputs)
     expect(ids).toHaveLength(52)
     const events = await waitFor<TeamEvent[]>(
-      (cb) => a.events.subscribeUpcoming(t, cb),
+      (cb) => a.events.subscribeUpcoming(t, cb, 52),
       (e) => e.length === 52,
     )
     expect(events.map((e) => e.id)).toEqual(ids)

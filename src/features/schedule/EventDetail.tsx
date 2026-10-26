@@ -7,7 +7,7 @@ import { Layer } from '../../components/Layer'
 import { ATTENDANCE_OPTIONS, statusOf } from '../../lib/attendance'
 import { formatDate, formatDateTime, formatTime } from '../../lib/format'
 import type { EventNote, TeamEvent } from '../../types'
-import { AttendanceButtons } from './AttendanceButtons'
+import { AttendanceButtons, AttendanceCapacityHint } from './AttendanceButtons'
 import styles from './schedule.module.css'
 import { useMyAttendance } from './useMyAttendance'
 
@@ -78,6 +78,7 @@ function EventDetailBody({ event, onBack, onEdit }: { event: TeamEvent; onBack()
         <section className={styles.detailSection}>
           <h3 className="section-title">あなたの出欠</h3>
           <AttendanceButtons value={myStatus} onChange={changeStatus} />
+          <AttendanceCapacityHint count={Object.keys(event.attendance).length} />
         </section>
 
         <section className={styles.detailSection}>

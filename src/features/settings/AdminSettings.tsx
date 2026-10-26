@@ -261,9 +261,11 @@ export function DeleteTeamSection() {
   const remove = async () => {
     if (busy) return
     setBusy(true)
+    let minimum = 0
+    if (!(await run(async () => { minimum = (await repo.teams.estimateDeletion(team.id)).minimumDocuments }))) { setBusy(false); return }
     const ok = await confirm({
       title: `「${team.name}」を削除しますか？`,
-      message: 'チームの予定・出欠・メモ・用具・メンバー情報をすべて削除します。全メンバーがこのチームから外れ、参加コードも無効になります。元に戻せません。他のチームやアカウントは残ります。',
+      message: `少なくとも${minimum}件のデータを削除します。メモ・用具名・参加コードなどはこの件数に含まれず、実際はさらに増えます。1回1000件までで停止します。無料枠はプロジェクト全体で1日20,000削除のため、数日に分ける場合があります。処理中は画面を開いたままにしてください。途中停止・再開ができますが取り消せません。他のチームやアカウントは残ります。`,
       confirmLabel: 'チームを削除する',
       danger: true,
     })

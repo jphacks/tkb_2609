@@ -14,6 +14,7 @@ import styles from './app.module.css'
 import { AccountSettings } from '../features/settings/AccountSettings'
 import { TeamSelect } from './TeamSelect'
 import { useSubscription } from './useSubscription'
+import type { DeletionProgress } from '../lib/deletion'
 
 /** ログイン状態 → チーム所属 → メイン画面の順に振り分ける */
 export function App() {
@@ -164,11 +165,17 @@ function TeamDeletion({ teamId }: { teamId: string }) {
   const { run } = useFeedback()
   const { refresh } = useRefresh()
   const [busy, setBusy] = useState(false)
+  const progress = useSubscription<DeletionProgress | null>((cb) => repo.teams.subscribeDeletionProgress(teamId, cb), [teamId])
+  const running = busy || progress?.running
   return (
     <main className="card" style={{ margin: 24, padding: 24 }}>
       <h1>チームを削除中です</h1>
-      <p>削除の途中で止まっています。通信状態を確認して、削除を再開してください。完了するまで、ほかのメンバーはこのチームを通常どおり使えます。他のチームには影響しません。</p>
-      <button className="btn btn-danger" disabled={busy} onClick={async () => {
+      <p>完了するまで画面を開いたままにしてください。1回1000件までで停止します。途中のデータは戻りませんが、後から残りを再開できます。他のチームも利用できます。</p>
+      <p>無料枠はプロジェクト全体で1日20,000削除です。この端末では全体の使用量を把握できません。上限の場合は管理者が使用量を確認し、日次リセット後に再開してください。</p>
+      <p role="status">{progress ? `今回、完了を確認できた削除操作：${progress.deleted}件（${progress.phase}）` : '前回までの累計件数はこの画面では分かりません。残っているデータから再開します。'}</p>
+      {progress?.message && <p role="alert">{progress.message}</p>}
+      {running && <button className="btn btn-secondary" onClick={() => repo.teams.pauseDeletion(teamId)}>処理の区切りで停止</button>}
+      <button className="btn btn-danger" disabled={!!running} onClick={async () => {
         setBusy(true)
         // 削除後は購読を張り直す（削除前から開いていたプロフィールの購読が、所属の更新を受け取らないことがあるため）
         if (await run(() => repo.teams.remove(teamId), 'チームを削除しました')) refresh()
