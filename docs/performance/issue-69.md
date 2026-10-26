@@ -24,10 +24,13 @@ npx firebase emulators:start --config firebase.scale.json --only auth,firestore 
   --project demo-bukatsu-scale --import=.scale-artifacts/emulator
 # 別ターミナルで開発サーバー。未使用のデフォルト接続も本番へ向かないようエミュレータ指定
 VITE_DATA_BACKEND=firebase VITE_USE_EMULATOR=true npm run dev -- --host 127.0.0.1 --port 5178
-# http://127.0.0.1:5178/tests/browser/scale.html
+# 大規模: http://127.0.0.1:5178/tests/browser/scale.html
+# 通常規模: http://127.0.0.1:5178/tests/browser/scale.html?preset=demo
 ```
 
-投入だけなら、同じ専用エミュレータを起動して `npm run scale:seed -- large`。通常規模は `demo`。出力先は `.scale-artifacts/`（git管理外）。専用プロジェクトに新しいIDで追加するため、既存チームを上書きしない。手動で繰り返したデータはローカルに蓄積する。
+`scale:check` は削除試験後に比較用のチームを作り直し、大規模の `browser.json` と通常規模の `browser-demo.json` を生成する。両方のデータをエミュレータexportに残すため、読み戻した後に上記の2つのURLで比較できる。
+
+投入だけなら、同じ専用エミュレータを起動して `npm run scale:seed -- large`。通常規模は `demo`。出力先は `.scale-artifacts/`（git管理外）。ブラウザ用に手動で作る場合は `npm run scale:seed -- demo .scale-artifacts/browser-demo.json` または `npm run scale:seed -- large .scale-artifacts/browser.json` とする（後者は全予定にメモを投入する）。専用プロジェクトに新しいIDで追加するため、既存チームを上書きしない。手動で繰り返したデータはローカルに蓄積する。
 
 ## データ取得
 
@@ -103,6 +106,8 @@ VITE_DATA_BACKEND=firebase VITE_USE_EMULATOR=true npm run dev -- --host 127.0.0.
 追加の中断テストと参加コード残存チェックを含む最終状態で、空の専用エミュレータへ再投入し、負荷試験3件がすべて成功した（196.43秒）。大規模チーム削除の再開は183,202ms。通常テストは123件成功・負荷試験3件スキップ。型チェック・lint・通常/Firebase構成のビルドも成功。上記の表は初回計測値を保持し、最終再実行の値は別ファイルに保存する。既存の開発環境との衝突を避けるため、最終実行だけポートをFirestore38080/Auth39099等へ変更した。
 
 ## 証跡と追跡
+
+レビュー修正後に通常の `npm run scale:check` を再実行し、3件成功（212.53秒）とexport完了を確認した。続けてexportを読み戻し、両方のブラウザ用JSONに記載された架空アカウントでログイン。メンバー/予定/用具/先頭予定のメモが、通常50/20/30/20、大規模100/500/300/200であることをSDKから確認した。
 
 - [最終再実行の生データ](issue-69-final-check.json)
 - [SDK計測の生データ](issue-69-measurements.json)

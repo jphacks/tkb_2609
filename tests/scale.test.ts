@@ -166,9 +166,14 @@ describe.skipIf(!enabled)('large-data validation (#69)', () => {
       }
       await assertRemoved(fixture); offErrors(); expect(errors).toEqual([])
     }
-    // UIでは1画面分のメモだけ用意する。500予定・300用具・100メンバーは同じ。
-    const browserFixture = await seedScale({ ...presets.large, noteEvents: 1 })
-    await writeFile(`${output}/browser.json`, JSON.stringify(browserFixture, null, 2))
+    // 削除試験で消したfixtureとは別に、比較用の両規模をexportへ残す。
+    // 大規模のUIでは先頭予定だけにメモを用意する。
+    for (const preset of ['demo', 'large'] as const) {
+      const options = preset === 'large' ? { ...presets.large, noteEvents: 1 } : presets.demo
+      const browserFixture = await seedScale(options)
+      const filename = preset === 'demo' ? 'browser-demo.json' : 'browser.json'
+      await writeFile(`${output}/${filename}`, JSON.stringify(browserFixture, null, 2))
+    }
   }, 900000)
   it('resumes member removal after losing the response for the 50th released item', async () => {
     if (!env) {
