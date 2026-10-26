@@ -12,7 +12,9 @@
     "preview": "vite preview",
     "emulators": "firebase emulators:start --project demo-bukatsu --only auth,firestore --import=.emulator-data --export-on-exit",
     "test": "firebase emulators:exec --only auth,firestore --project demo-bukatsu \"vitest run\"",
-    "typecheck:tests": "tsc -p tsconfig.test.json"
+    "typecheck:tests": "tsc -p tsconfig.test.json",
+    "scale:seed": "node scripts/seed-scale.ts",
+    "scale:check": "firebase emulators:exec --config firebase.scale.json --only auth,firestore --project demo-bukatsu-scale --export-on-exit .scale-artifacts/emulator \"BUKATSU_SCALE_CHECK=1 vitest run tests/scale.test.ts tests/scale-limits.test.ts --testTimeout=900000 --hookTimeout=900000\""
   },
   "dependencies": {
     "firebase": "^13.1.0",
