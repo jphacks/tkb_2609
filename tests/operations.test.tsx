@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { MainShell, type TabId } from '../src/app/MainShell'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -630,5 +631,36 @@ describe('team switching in the header (#59)', () => {
     expect(screen.getByRole('button', { name: 'チームを追加' })).toBeTruthy()
     await user.selectOptions(screen.getByRole('combobox', { name: '表示するチーム' }), 'サンプルチーム')
     expect(await within(await screen.findByRole('banner')).findByRole('combobox', { name: '表示するチーム' })).toBeTruthy()
+  })
+})
+
+
+describe('team navigation from event layers (#108)', () => {
+  it('keeps schedule selected, closes details when switching tabs, and returns to the list on schedule', async () => {
+    const h = harness()
+    const event = { id: 'event', title: 'ナビ確認予定', typeId: 'practice', startAt: new Date(), place: null, attendance: {}, createdBy: 'admin', updatedAt: new Date() }
+    vi.spyOn(h.repo.events, 'subscribeUpcoming').mockImplementation((_t, cb) => { cb([event]); return () => {} })
+    vi.spyOn(h.repo.events, 'subscribeNotes').mockImplementation((_t, _e, cb) => { cb([]); return () => {} })
+    vi.spyOn(h.repo.equipment, 'subscribe').mockImplementation((_t, cb) => { cb([]); return () => {} })
+    function Host() { const [tab, setTab] = useState<TabId>('schedule'); return <MainShell tab={tab} onTabChange={setTab} /> }
+    render(<Host />, { wrapper: h.wrapper })
+    const nav = () => within(screen.getByRole('navigation', { name: 'メインメニュー' }))
+    const open = async () => { await userEvent.click(within((await screen.findAllByRole('article'))[0]).getAllByRole('button')[0]); expect(screen.getByRole('heading', { name: '予定の詳細' })).toBeTruthy() }
+    await open()
+    expect(nav().getByRole('button', { name: '予定' }).getAttribute('aria-current')).toBe('page')
+    await userEvent.click(nav().getByRole('button', { name: '用具' }))
+    expect(screen.queryByRole('heading', { name: '予定の詳細' })).toBeNull()
+    expect(document.body.style.overflow).not.toBe('hidden')
+    await userEvent.click(nav().getByRole('button', { name: '予定' })); await open()
+    await userEvent.click(nav().getByRole('button', { name: '設定' }))
+    expect(screen.queryByRole('heading', { name: '予定の詳細' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'あなた' })).toBeTruthy()
+    await userEvent.click(nav().getByRole('button', { name: '予定' })); await open()
+    await userEvent.click(nav().getByRole('button', { name: '予定' }))
+    expect(screen.queryByRole('heading', { name: '予定の詳細' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: '予定を追加' }))
+    expect(screen.getByRole('heading', { name: '予定を追加' })).toBeTruthy()
+    await userEvent.click(nav().getByRole('button', { name: '用具' }))
+    expect(screen.queryByRole('heading', { name: '予定を追加' })).toBeNull()
   })
 })

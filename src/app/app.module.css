@@ -1,4 +1,8 @@
 .shell {
+  /* このシェル内の詳細・編集レイヤーだけがナビゲーションを避ける。 */
+  --team-layer-bottom: calc(var(--tabbar-h) + var(--safe-bottom));
+  --team-layer-left: 0px;
+  --team-layer-right: 0px;
   max-width: var(--app-max-w);
   min-height: 100dvh;
   margin: 0 auto;
@@ -46,6 +50,9 @@
 /* 幅の広い画面とスマホ横向き：タブバーを左側のレールにする */
 @media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
   .shell {
+    --team-layer-bottom: 0px;
+    --team-layer-left: calc(max(0px, (100vw - var(--app-max-w)) / 2) + var(--rail-w) + env(safe-area-inset-left, 0px));
+    --team-layer-right: max(0px, (100vw - var(--app-max-w)) / 2);
     display: grid;
     grid-template-areas:
       'nav header'
